@@ -1,0 +1,303 @@
+[
+  {
+    "antecedents": [
+      "Books",
+      "Groceries"
+    ],
+    "consequents": [
+      "Baby Products"
+    ],
+    "support": 0.00554177897574124,
+    "confidence": 0.2532851511169514,
+    "lift": 1.9678503741076596
+  },
+  {
+    "antecedents": [
+      "Beauty"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.02389937106918239,
+    "confidence": 0.261050482845254,
+    "lift": 1.6694391370188906
+  },
+  {
+    "antecedents": [
+      "Fashion"
+    ],
+    "consequents": [
+      "Beauty"
+    ],
+    "support": 0.02389937106918239,
+    "confidence": 0.15283842794759828,
+    "lift": 1.6694391370188906
+  },
+  {
+    "antecedents": [
+      "Health"
+    ],
+    "consequents": [
+      "Sports"
+    ],
+    "support": 0.01747349505840072,
+    "confidence": 0.18145853549302085,
+    "lift": 1.5790229391084893
+  },
+  {
+    "antecedents": [
+      "Sports"
+    ],
+    "consequents": [
+      "Health"
+    ],
+    "support": 0.01747349505840072,
+    "confidence": 0.15205153865399051,
+    "lift": 1.5790229391084893
+  },
+  {
+    "antecedents": [
+      "Baby Products"
+    ],
+    "consequents": [
+      "Books"
+    ],
+    "support": 0.01638095238095238,
+    "confidence": 0.1272686658848495,
+    "lift": 1.5591980575228679
+  },
+  {
+    "antecedents": [
+      "Books"
+    ],
+    "consequents": [
+      "Baby Products"
+    ],
+    "support": 0.01638095238095238,
+    "confidence": 0.2006868615709757,
+    "lift": 1.5591980575228679
+  },
+  {
+    "antecedents": [
+      "Pet Supplies"
+    ],
+    "consequents": [
+      "Sports"
+    ],
+    "support": 0.00825876010781671,
+    "confidence": 0.17393278837420525,
+    "lift": 1.5135351002352582
+  },
+  {
+    "antecedents": [
+      "Electronics"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.03516981132075472,
+    "confidence": 0.23190672543722454,
+    "lift": 1.483062430542582
+  },
+  {
+    "antecedents": [
+      "Fashion"
+    ],
+    "consequents": [
+      "Electronics"
+    ],
+    "support": 0.03516981132075472,
+    "confidence": 0.22491381291657092,
+    "lift": 1.4830624305425817
+  },
+  {
+    "antecedents": [
+      "Pet Supplies"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.010968553459119497,
+    "confidence": 0.23100211928549802,
+    "lift": 1.4772774003950777
+  },
+  {
+    "antecedents": [
+      "Fashion"
+    ],
+    "consequents": [
+      "Sports"
+    ],
+    "support": 0.02578975741239892,
+    "confidence": 0.16492760284991956,
+    "lift": 1.4351734267259857
+  },
+  {
+    "antecedents": [
+      "Sports"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.02578975741239892,
+    "confidence": 0.22441831373530147,
+    "lift": 1.4351734267259857
+  },
+  {
+    "antecedents": [
+      "Electronics",
+      "Groceries"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.005369272237196765,
+    "confidence": 0.2179749051648672,
+    "lift": 1.3939673031975248
+  },
+  {
+    "antecedents": [
+      "Pet Supplies"
+    ],
+    "consequents": [
+      "Beauty"
+    ],
+    "support": 0.005807726864330638,
+    "confidence": 0.12231304874356645,
+    "lift": 1.3360134181085563
+  },
+  {
+    "antecedents": [
+      "Sports"
+    ],
+    "consequents": [
+      "Beauty"
+    ],
+    "support": 0.013175202156334232,
+    "confidence": 0.1146484863647736,
+    "lift": 1.2522941560413854
+  },
+  {
+    "antecedents": [
+      "Beauty"
+    ],
+    "consequents": [
+      "Sports"
+    ],
+    "support": 0.013175202156334232,
+    "confidence": 0.14391143911439114,
+    "lift": 1.2522941560413852
+  },
+  {
+    "antecedents": [
+      "Beauty"
+    ],
+    "consequents": [
+      "Electronics"
+    ],
+    "support": 0.017279424977538184,
+    "confidence": 0.1887414618827039,
+    "lift": 1.244545044050959
+  },
+  {
+    "antecedents": [
+      "Electronics"
+    ],
+    "consequents": [
+      "Beauty"
+    ],
+    "support": 0.017279424977538184,
+    "confidence": 0.11393904924404,
+    "lift": 1.244545044050959
+  },
+  {
+    "antecedents": [
+      "Baby Products",
+      "Groceries"
+    ],
+    "consequents": [
+      "Books"
+    ],
+    "support": 0.00554177897574124,
+    "confidence": 0.10049530761209595,
+    "lift": 1.231191411723569
+  },
+  {
+    "antecedents": [
+      "Books"
+    ],
+    "consequents": [
+      "Beauty"
+    ],
+    "support": 0.00912848158131177,
+    "confidence": 0.11183515322296583,
+    "lift": 1.2215643944527848
+  },
+  {
+    "antecedents": [
+      "Groceries",
+      "Fashion"
+    ],
+    "consequents": [
+      "Electronics"
+    ],
+    "support": 0.005369272237196765,
+    "confidence": 0.18188458728999268,
+    "lift": 1.1993313999109074
+  },
+  {
+    "antecedents": [
+      "Pet Supplies"
+    ],
+    "consequents": [
+      "Electronics"
+    ],
+    "support": 0.008330637915543575,
+    "confidence": 0.17544656372994244,
+    "lift": 1.1568796236280507
+  },
+  {
+    "antecedents": [
+      "Sports"
+    ],
+    "consequents": [
+      "Electronics"
+    ],
+    "support": 0.01835759209344115,
+    "confidence": 0.15974480860645485,
+    "lift": 1.0533435943586442
+  },
+  {
+    "antecedents": [
+      "Electronics"
+    ],
+    "consequents": [
+      "Sports"
+    ],
+    "support": 0.01835759209344115,
+    "confidence": 0.12104839091900091,
+    "lift": 1.053343594358644
+  },
+  {
+    "antecedents": [
+      "Beauty"
+    ],
+    "consequents": [
+      "Home & Kitchen"
+    ],
+    "support": 0.013132075471698113,
+    "confidence": 0.1434403705739185,
+    "lift": 1.0357679740538959
+  },
+  {
+    "antecedents": [
+      "Books"
+    ],
+    "consequents": [
+      "Fashion"
+    ],
+    "support": 0.012794249775381851,
+    "confidence": 0.1567453328636844,
+    "lift": 1.002399192583778
+  }
+]

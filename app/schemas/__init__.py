@@ -1,0 +1,1 @@
+"""Xenia CRM schemas package."""
