@@ -46,6 +46,19 @@ Returns the latest AI-generated executive briefing instantly from cache. If toda
 ### `/api/analytics` — NL Query Engine
 Natural language → SQL via Groq. Analysts can ask questions in plain English and get structured data results.
 
+### `/api/voice` — Voice Campaigns (ElevenLabs)
+Premium outreach channel restricted to Champions and Lost Champions only.
+- `GET /voices` — Fetch available ElevenLabs voice models (filters for "premade" free category voices).
+- `GET /eligible-audience` — Verify customer cohort size and count eligible participants.
+- `POST /generate-script` — Generate personalized voice scripts using Groq based on segment history.
+- `POST /generate-audio` — Text-To-Speech (TTS) voice generation via ElevenLabs API (returns base64 audio).
+- `POST /simulate-calls` — Synthetic voice call simulator and outcome status logging.
+
+### `/api/settings` — API Configuration
+System settings configuration and credentials.
+- `GET /api-keys` — Fetch current API status (Groq and Elevenlabs keys).
+- `POST /api-keys` — Store and validate new credentials in real-time.
+
 ### `/api/webhook/delivery` — Attribution Webhooks
 Simulates carrier delivery callbacks (delivered / opened / clicked / promo_applied / purchased) for attribution tracking.
 
