@@ -70,7 +70,7 @@ class OpportunityDiscoveryService:
 
             discovered_ops.append({
                 "type": "reactivation",
-                "description": "Reactivate high-value customers showing signs of drift and high ML churn probability.",
+                "description": "Re-engage premium shoppers who haven't made a purchase recently.",
                 "audience_size": len(reactivate_ids),
                 "segment_filter": {
                     "min_value_score": 65.0,
@@ -81,13 +81,13 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(potential_rev, 2))),
                 "priority": "high",
                 "ai_explanation": (
-                    f"Identified {len(reactivate_ids)} high-value customers with a churn probability "
-                    "above 65%. These customers have high historical spend but have not purchased recently. "
-                    "Proactive outreach is recommended before they fully churn."
+                    f"Identified {len(reactivate_ids)} high-value customers with slipping recency. "
+                    "These customers have high historical spend but have not purchased recently. "
+                    "Proactive outreach is recommended to restore their shopping frequency."
                 ),
                 "ai_action_plan": (
                     "1. Launch a high-incentive campaign using WhatsApp.\n"
-                    "2. Attach the exclusive reactivate promo code WINBACK25 (25% off).\n"
+                    "2. Attach the exclusive promo code WINBACK25 (25% off).\n"
                     "3. Personalize the message copy with their top purchased category."
                 ),
                 "ai_context": {
@@ -98,7 +98,7 @@ class OpportunityDiscoveryService:
                     "average_aov": avg_aov
                 },
                 "confidence_score": 0.90,
-                "key_drivers": ["High ML churn risk", "High historical lifetime value (LTV)", "Recency slipping"],
+                "key_drivers": ["High lifetime spend", "Recent drop in purchase frequency", "Lapsing VIP status"],
                 "recommended_promotion_id": promo_id,
                 "recommended_channel": "WhatsApp",
                 "status": "open",
@@ -158,7 +158,7 @@ class OpportunityDiscoveryService:
 
                 discovered_ops.append({
                     "type": "cross_sell",
-                    "description": f"Cross-sell {target_cat} items to {source_cat} buyers based on basket affinities.",
+                    "description": f"Introduce relevant {target_cat} items to {source_cat} buyers based on their previous basket preferences.",
                     "audience_size": len(cross_sell_ids),
                     "segment_filter": {
                         "source_category": source_cat,
@@ -171,7 +171,7 @@ class OpportunityDiscoveryService:
                     "potential_revenue": Decimal(str(round(potential_rev, 2))),
                     "priority": "medium",
                     "ai_explanation": (
-                        f"Mined association rules indicate high correlation between {source_cat} and {target_cat} (Lift: {target_rule['lift']:.2f}). "
+                        f"Based on co-occurrence shopping patterns, there is a strong affinity between product categories. "
                         f"Identified {len(cross_sell_ids)} active shoppers who buy {source_cat} but have never purchased from {target_cat}."
                     ),
                     "ai_action_plan": (
@@ -188,7 +188,7 @@ class OpportunityDiscoveryService:
                         "average_aov": avg_aov
                     },
                     "confidence_score": 0.82,
-                    "key_drivers": ["FP-Growth mined affinity rule", "Active purchase behavior", "Product category gap"],
+                    "key_drivers": ["Active purchase behavior", "Category interest matching", "Product category gap"],
                     "recommended_promotion_id": promo_id,
                     "recommended_channel": "Email",
                     "status": "open",
@@ -222,7 +222,7 @@ class OpportunityDiscoveryService:
 
             discovered_ops.append({
                 "type": "winback",
-                "description": "High-priority winback campaign targeting former VIP champions who have drifted.",
+                "description": "Bring back former VIP shoppers who haven't placed an order in over 6 months.",
                 "audience_size": len(winback_ids),
                 "segment_filter": {
                     "min_lifetime_spend": 40000.0,
@@ -232,7 +232,7 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(potential_rev, 2))),
                 "priority": "high",
                 "ai_explanation": (
-                    f"Discovered {len(winback_ids)} lost VIP champions. These customers contributed "
+                    f"Identified {len(winback_ids)} inactive VIP shoppers. These customers contributed "
                     "significant revenue historically but haven't placed an order in over 6 months."
                 ),
                 "ai_action_plan": (
@@ -247,7 +247,7 @@ class OpportunityDiscoveryService:
                     "average_historical_spend": avg_spend
                 },
                 "confidence_score": 0.88,
-                "key_drivers": ["High historical spend", "Long dormancy period (6+ months)", "Former Champion status"],
+                "key_drivers": ["High historical spend", "Extended inactivity period", "VIP customer status"],
                 "recommended_promotion_id": promo_id,
                 "recommended_channel": "WhatsApp",
                 "status": "open",
@@ -284,7 +284,7 @@ class OpportunityDiscoveryService:
 
             discovered_ops.append({
                 "type": "channel_push",
-                "description": "WhatsApp flash sale targeting highly active customers who prefer conversational channels.",
+                "description": "WhatsApp promotion targeting frequent shoppers who prefer conversational engagement.",
                 "audience_size": len(channel_ids),
                 "segment_filter": {
                     "preferred_channel": "WhatsApp",
@@ -296,7 +296,7 @@ class OpportunityDiscoveryService:
                 "priority": "medium",
                 "ai_explanation": (
                     f"Targeting {len(channel_ids)} active customers who primarily open and click communications "
-                    "on WhatsApp, but haven't placed an order in the last fortnight. Highly receptive to mobile check-ins."
+                    "on WhatsApp, but haven't placed an order in the last fortnight. Highly receptive to mobile updates."
                 ),
                 "ai_action_plan": (
                     "1. Schedule an instant WhatsApp blast with a 24-hour expiration notice.\n"
@@ -309,7 +309,7 @@ class OpportunityDiscoveryService:
                     "average_aov": avg_aov
                 },
                 "confidence_score": 0.85,
-                "key_drivers": ["Preferred channel alignment", "High short-term activation probability", "Warm lead status"],
+                "key_drivers": ["Preferred channel alignment", "High responsiveness probability", "Active shopper status"],
                 "recommended_promotion_id": promo_id,
                 "recommended_channel": "WhatsApp",
                 "status": "open",
@@ -346,7 +346,7 @@ class OpportunityDiscoveryService:
             
             discovered_ops.append({
                 "type": "fatigue_suppression",
-                "description": "Guardian AI Safety Action: Apply a 14-day marketing cooling-off period to over-saturated shoppers.",
+                "description": "Apply a 14-day marketing cooling-off period to over-contacted VIP customers to protect engagement.",
                 "audience_size": len(suppression_ids),
                 "segment_filter": {
                     "segment_name": "Spam Risk"
@@ -355,9 +355,9 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(saved_ltv, 2))),  # Revenue saved through retention
                 "priority": "high",
                 "ai_explanation": (
-                    f"Guardian AI has flagged {len(suppression_ids)} customers as highly fatigued. "
-                    "These shoppers have ignored multiple consecutive communications or received excessive "
-                    "contacts in the last week. Continuing to message them creates high brand annoyance and triggers permanent churn."
+                    f"Identified {len(suppression_ids)} customers flagged as over-contacted. "
+                    "These shoppers have ignored recent messages. Continuing to message them increases the risk of unsubscribes. "
+                    "A temporary cooling-off period is recommended to maintain long-term loyalty."
                 ),
                 "ai_action_plan": (
                     "1. Exclude these customer IDs from all ongoing and upcoming marketing blasts.\n"
@@ -371,7 +371,7 @@ class OpportunityDiscoveryService:
                     "total_risk_revenue": total_fatigue_spend
                 },
                 "confidence_score": 0.95,
-                "key_drivers": ["Spam Risk membership", "Consecutive campaign ignores", "Channel oversaturation"],
+                "key_drivers": ["Multiple ignored communications", "High message frequency", "Channel oversaturation"],
                 "recommended_promotion_id": None,
                 "recommended_channel": None,  # No channel (Do not contact!)
                 "status": "open",

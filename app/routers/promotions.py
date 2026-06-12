@@ -1,13 +1,48 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
 from app.database import get_db
 from app.models.promotion import Promotion
+from app.models.product import Product
+from app.models.customer import Customer, CustomerSegment
 from app.schemas.promotions import PromotionCreate, PromotionUpdate, PromotionResponse
 
 router = APIRouter(prefix="/api/promotions", tags=["Promotions"])
+
+@router.get("/categories", response_model=List[str])
+def get_promotion_categories(db: Session = Depends(get_db)):
+    """
+    GET /api/promotions/categories
+    Retrieve distinct product categories available for promotion targeting.
+    """
+    categories = db.query(Product.category).distinct().filter(Product.category.isnot(None)).all()
+    return sorted([c[0] for c in categories])
+
+@router.get("/cities", response_model=List[str])
+def get_promotion_cities(db: Session = Depends(get_db)):
+    """
+    GET /api/promotions/cities
+    Retrieve distinct customer locations/cities available for promotion targeting.
+    """
+    cities = db.query(Customer.city).distinct().filter(Customer.city.isnot(None)).all()
+    return sorted([c[0] for c in cities])
+
+@router.get("/segments", response_model=List[str])
+def get_promotion_segments(db: Session = Depends(get_db)):
+    """
+    GET /api/promotions/segments
+    Retrieve distinct customer segments from the database for targeting, or default segments if empty.
+    """
+    segments = db.query(CustomerSegment.segment_name).distinct().filter(CustomerSegment.segment_name.isnot(None)).all()
+    names = [s[0] for s in segments]
+    default_segments = ["Champions", "Loyal Customers", "At Risk", "Lost Champions", "New Customers"]
+    for d in default_segments:
+        if d not in names:
+            names.append(d)
+    return sorted(names)
 
 @router.get("", response_model=List[PromotionResponse])
 def list_promotions(db: Session = Depends(get_db)):
@@ -42,13 +77,19 @@ def create_promotion(payload: PromotionCreate, db: Session = Depends(get_db)):
         promo_code=payload.promo_code,
         discount_type=payload.discount_type,
         discount_value=payload.discount_value,
+        max_discount_cap=None,
         applicable_categories=payload.applicable_categories,
         applicable_cities=payload.applicable_cities,
+        applicable_segments="ALL",
         start_date=payload.start_date,
         end_date=payload.end_date,
-        max_usage_limit=payload.max_usage_limit,
-        min_order_value=payload.min_order_value,
+        max_usage_limit=None,
+        per_shopper_limit=None,
+        max_budget=None,
+        min_order_value=None,
         active=payload.active,
+        priority="Standard",
+        allow_xenia_recommendations=True,
         category=category_val,
         discount_percentage=pct_val
     )

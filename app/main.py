@@ -74,7 +74,7 @@ def health_check():
         "status": "healthy",
         "service": settings.app_name,
         "version": "1.0.0",
-        "ai_layer": "Xenia AI (Gemini 2.5 Flash)",
+        "ai_layer": "Xenia CRM Intelligence Core",
     }
 
 
@@ -88,7 +88,7 @@ def root():
 
 
 # ── Register Routers ──────────────────────────────────────────────────────────
-from app.routers import customers, opportunities, campaigns, planner, analytics, briefing, webhooks, promotions
+from app.routers import customers, opportunities, campaigns, planner, analytics, briefing, webhooks, promotions, voice, settings as settings_router
 
 app.include_router(customers.router)
 app.include_router(opportunities.router)
@@ -98,5 +98,7 @@ app.include_router(analytics.router)
 app.include_router(briefing.router)
 app.include_router(webhooks.router)
 app.include_router(promotions.router)
+app.include_router(voice.router)
+app.include_router(settings_router.router)
 
 

@@ -8,14 +8,12 @@ class PromotionCreate(BaseModel):
     name: str
     description: Optional[str] = None
     promo_code: str
-    discount_type: str = "Percentage" # Percentage, Fixed Amount, Free Shipping, etc.
+    discount_type: str = "Percentage" # Percentage, Fixed Amount, Buy X Get Y, Free Shipping
     discount_value: Decimal = Decimal("0.00")
     applicable_categories: str = "ALL"
     applicable_cities: str = "ALL"
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    max_usage_limit: Optional[int] = None
-    min_order_value: Optional[Decimal] = None
     active: bool = True
 
 class PromotionUpdate(BaseModel):
@@ -28,8 +26,6 @@ class PromotionUpdate(BaseModel):
     applicable_cities: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    max_usage_limit: Optional[int] = None
-    min_order_value: Optional[Decimal] = None
     active: Optional[bool] = None
 
 class PromotionResponse(BaseModel):
@@ -43,8 +39,6 @@ class PromotionResponse(BaseModel):
     applicable_cities: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    max_usage_limit: Optional[int] = None
-    min_order_value: Optional[Decimal] = None
     active: bool
     
     # Performance metrics

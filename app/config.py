@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""  # kept for backward compat, unused
     gemini_model: str = "llama-3.3-70b-versatile"  # alias kept for compat
 
+    # ── ElevenLabs (Phase 2 Voice Campaigns) ─────────────────────────────────
+    # Set ELEVENLABS_API_KEY in .env to enable real TTS audio synthesis.
+    elevenlabs_api_key: str = ""                               # Phase 2 — leave empty for mock preview
+    elevenlabs_voice_id_female: str = "EXAVITQu4vr4xnSDxMaL" # Xenia Voice (default)
+    elevenlabs_voice_id_male: str = "VR6AewLTigWG4xSOukaG"   # Premium Male
+
     # ── Channel Service ───────────────────────────────────────────────────────
     channel_service_url: str = "http://localhost:8001"
     crm_webhook_url: str = "http://localhost:8000/api/webhook/delivery"

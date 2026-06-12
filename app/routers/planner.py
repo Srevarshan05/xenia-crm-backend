@@ -30,6 +30,39 @@ from app.schemas.planner import (
 logger = logging.getLogger("xenia.planner_router")
 router = APIRouter(prefix="/api/planner", tags=["AI Goal Planner"])
 
+# ── Voice Eligibility — Future-Ready Stub ───────────────────────────────────────
+# Voice generation is NOT implemented in this phase.
+# This logic evaluates eligibility and stores the result in CampaignSimulation
+# so that Phase 2 voice integration can read it without DB schema changes.
+VOICE_ELIGIBLE_SEGMENTS = {"Champion", "High Value", "Lost Champion", "At Risk"}
+VOICE_LTV_THRESHOLD_INR = 10_000.0   # At-Risk qualifies only if LTV > this
+
+def evaluate_voice_eligibility(target_segment: str, avg_ltv: float) -> tuple[bool, str]:
+    """
+    Evaluates whether this campaign audience qualifies for a Voice campaign.
+    Returns (eligible: bool, reason: str).
+
+    Eligible segments:
+      - Champion, High Value          → always eligible (VIP concierge)
+      - Lost Champion, At-Risk        → eligible only if avg LTV > threshold (win-back)
+    All others                        → not eligible, default to WhatsApp/Email/SMS
+
+    NOTE: Voice generation is deferred to Phase 2. This only sets the flag.
+    """
+    segment = target_segment.strip() if target_segment else ""
+    if segment in ("Champion", "High Value"):
+        return True, f"Segment '{segment}' qualifies for premium voice outreach (VIP retention)."
+    if segment in ("Lost Champion", "At Risk") and avg_ltv >= VOICE_LTV_THRESHOLD_INR:
+        return True, (
+            f"Segment '{segment}' with avg LTV ₹{avg_ltv:,.0f} qualifies for voice win-back "
+            f"(LTV threshold: ₹{VOICE_LTV_THRESHOLD_INR:,.0f})."
+        )
+    return False, (
+        f"Segment '{segment}' does not meet voice eligibility criteria. "
+        f"Voice campaigns are reserved for Champion, High Value, Lost Champion (high LTV), "
+        f"and At-Risk (high LTV) segments only. Defaulting to WhatsApp / Email / SMS."
+    )
+
 def is_promotion_eligible(promo: Promotion, category_filter: str | None, city_filter: str | None) -> bool:
     """Enforces active status, date validity, max usage limit, category and city matching."""
     now = datetime.now(timezone.utc)
@@ -154,11 +187,12 @@ def get_prepare_context(opportunity_id: uuid.UUID, db: Session = Depends(get_db)
     """
     GET /api/planner/prepare-context
     Fetches the audience review summary, eligible shopper list, and recommended promotion details
-    with match rationale BEFORE campaign generation.
+    with full explainability rationale BEFORE campaign generation.
+    Called from the Suggested Action → Audience Review → Promotion Review workflow step.
     """
     op = db.query(Opportunity).filter(Opportunity.opportunity_id == opportunity_id).first()
     if not op:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
+        raise HTTPException(status_code=404, detail="Suggested Action not found")
         
     filters = op.segment_filter or {}
     
@@ -203,26 +237,31 @@ def get_prepare_context(opportunity_id: uuid.UUID, db: Session = Depends(get_db)
             
     promo_recommendation = None
     if selected_promo:
-        # Generate match rationale bullet points
+        # Build match rationale bullet points with historical performance data
         rationale = []
-        if category_filter and selected_promo.applicable_categories != "ALL":
-            rationale.append(f"High category affinity matching target categories: '{selected_promo.applicable_categories}'")
-        else:
-            rationale.append(f"Broad category coverage matching '{category_filter or 'All Categories'}'")
-            
-        if audience_summary.avg_inactivity_days > 30:
-            rationale.append(f"Moderate inactivity average ({audience_summary.avg_inactivity_days} days) triggers purchase incentive")
-        else:
-            rationale.append("Active customer segment with high conversion probability")
-            
         promo_roi = promo_stats_map.get(selected_promo.promotion_id, {}).get("avg_roi", 0.0)
-        if promo_roi > 0:
-            rationale.append(f"Strong historical ROI benchmark of {promo_roi:.1f}% in similar segments")
+        promo_cvr = promo_stats_map.get(selected_promo.promotion_id, {}).get("avg_cvr", 0.0)
+        promo_used = promo_stats_map.get(selected_promo.promotion_id, {}).get("times_used", 0)
+
+        if category_filter and selected_promo.applicable_categories != "ALL":
+            rationale.append(f"Category match: promotion covers '{selected_promo.applicable_categories}' which aligns with audience's top category '{category_filter}'.")
         else:
-            rationale.append("High conversion rate benchmark for repeat shoppers")
-            
-        rationale.append("Promotion is currently active and within validation period")
-        
+            rationale.append(f"Broad coverage: promotion applies to '{category_filter or 'All Categories'}' — maximises eligible shopper count.")
+
+        if audience_summary.avg_inactivity_days > 30:
+            rationale.append(f"Reactivation incentive: audience avg inactivity is {audience_summary.avg_inactivity_days} days — this promotion provides a purchase trigger.")
+        else:
+            rationale.append("High-intent segment: shoppers in this cohort have strong recent activity and respond well to promotions.")
+
+        if promo_roi > 0:
+            rationale.append(f"Proven historical ROI: this promotion achieved {promo_roi:.1f}% average ROI across {promo_used} past campaigns.")
+        if promo_cvr > 0:
+            rationale.append(f"Strong conversion benchmark: {promo_cvr*100:.1f}% conversion rate in previous deployments.")
+        if selected_promo.times_used > 0:
+            rationale.append(f"Proven track record: used {selected_promo.times_used} times with {selected_promo.purchases_attributed} attributed purchases.")
+
+        rationale.append("Eligibility confirmed: active, within validity period, and within usage limits.")
+
         promo_recommendation = PromotionRecommendation(
             promotion_id=str(selected_promo.promotion_id),
             name=selected_promo.name,
@@ -231,10 +270,18 @@ def get_prepare_context(opportunity_id: uuid.UUID, db: Session = Depends(get_db)
             discount_value=float(selected_promo.discount_value),
             applicable_categories=selected_promo.applicable_categories,
             applicable_cities=selected_promo.applicable_cities,
+            applicable_segments=selected_promo.applicable_segments,
             min_order_value=float(selected_promo.min_order_value) if selected_promo.min_order_value else None,
             start_date=selected_promo.start_date,
             end_date=selected_promo.end_date,
-            rationale=rationale
+            rationale=rationale,
+            historical_performance={
+                "avg_roi_pct": promo_roi,
+                "avg_conversion_rate": promo_cvr,
+                "times_used_in_campaigns": promo_used,
+                "total_purchases_attributed": selected_promo.purchases_attributed,
+                "total_revenue_generated": float(selected_promo.revenue_generated),
+            }
         )
         
     # 4. Fetch shopper list (first 100 eligible shoppers for browse/drilldown)
@@ -250,7 +297,9 @@ def get_prepare_context(opportunity_id: uuid.UUID, db: Session = Depends(get_db)
                 lifetime_value=float(c.metrics.total_spend or 0.0),
                 last_purchase_days=int(c.metrics.days_since_last_order or 0),
                 churn_probability=float(c.metrics.churn_probability or 0.0),
-                preferred_channel=c.metrics.preferred_channel or "WhatsApp"
+                preferred_channel=c.metrics.preferred_channel or "WhatsApp",
+                top_category=c.metrics.top_category if c.metrics else None,
+                total_orders=c.metrics.total_orders if c.metrics else 0
             )
         )
         
@@ -344,7 +393,10 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
             "city_distribution": audience_summary_data.city_distribution,
             "channel_distribution": audience_summary_data.channel_distribution
         },
-        "available_promotions": promo_list
+        "available_promotions": promo_list,
+        "city_filter": city_filter,
+        "category_filter": category_filter,
+        "segment_filter": segment_filter
     }
     
     strategy = XeniaAIService.generate_campaign_strategy(goal, context)
@@ -380,8 +432,42 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
     db.commit()
     db.refresh(new_campaign)
     
-    # 7. Run Campaign Simulation
+    # 7. Run Campaign Simulation + store explainability
     simulation = CampaignSimulationService.run_simulation(db, new_campaign.campaign_id)
+
+    # Evaluate voice eligibility and store as future-ready stub
+    voice_eligible, voice_reason = evaluate_voice_eligibility(
+        target_segment=new_campaign.target_segment or "",
+        avg_ltv=audience_summary_data.avg_spend
+    )
+
+    # Build promotion explainability text
+    why_promotion_text = "No promotion selected."
+    if selected_promo:
+        perf = promo_stats_map.get(selected_promo.promotion_id, {})
+        why_promotion_text = (
+            f"'{selected_promo.name}' (code: {selected_promo.promo_code}) was recommended because: "
+            f"it is the highest-ROI active promotion matching the audience category. "
+            f"Historical performance: {perf.get('avg_roi', 0.0):.1f}% avg ROI across "
+            f"{perf.get('times_used', 0)} campaigns, {float(selected_promo.revenue_generated):,.0f} INR attributed revenue."
+        )
+
+    # Store explainability in simulation record
+    ai_exp = strategy.get("ai_explanation", {})
+    if isinstance(ai_exp, dict):
+        db.query(CampaignSimulation).filter(
+            CampaignSimulation.campaign_id == new_campaign.campaign_id
+        ).update({
+            "why_audience": ai_exp.get("why_audience", ""),
+            "why_channel": ai_exp.get("why_channel", ""),
+            "why_promotion": why_promotion_text,
+            "historical_performance_note": str(promo_stats_map.get(
+                selected_promo.promotion_id if selected_promo else None, {}
+            )),
+            "voice_eligible": voice_eligible,
+            "voice_ineligible_reason": None if voice_eligible else voice_reason,
+        })
+        db.commit()
     
     # 8. Package Response
     promo_preview = None
@@ -415,14 +501,14 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
             why_audience=ai_exp,
             why_now="Targeting dormant shoppers immediately to avoid permanent churn.",
             why_channel="Preferred communication channel for high responsiveness.",
-            why_promotion="Incentivizing with appropriate promotion code."
+            why_promotion=why_promotion_text
         )
     else:
         ai_exp_obj = CampaignStrategyExplanation(
             why_audience=ai_exp.get("why_audience", "Based on category affinities and inactivity."),
             why_now=ai_exp.get("why_now", "Based on current inactive interval."),
             why_channel=ai_exp.get("why_channel", "Selected based on preferred channel distribution."),
-            why_promotion=ai_exp.get("why_promotion", "Best-matching promotion for category and inactivity.")
+            why_promotion=ai_exp.get("why_promotion", why_promotion_text)
         )
         
     shopper_previews = []
@@ -437,7 +523,9 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
                 lifetime_value=float(c.metrics.total_spend or 0.0),
                 last_purchase_days=int(c.metrics.days_since_last_order or 0),
                 churn_probability=float(c.metrics.churn_probability or 0.0),
-                preferred_channel=c.metrics.preferred_channel or "WhatsApp"
+                preferred_channel=c.metrics.preferred_channel or "WhatsApp",
+                top_category=c.metrics.top_category if c.metrics else None,
+                total_orders=c.metrics.total_orders if c.metrics else 0
             )
         )
         
@@ -473,7 +561,7 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
         ai_explanation=ai_exp_obj,
         audience_summary=audience_summary_data,
         eligible_shoppers=shopper_previews,
-        
+
         # Channel specific copy
         whatsapp_template=whatsapp_template,
         whatsapp_variants=whatsapp_variants,
@@ -482,5 +570,9 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
         email_template=email_template,
         email_variants=email_variants,
         sms_template=sms_template,
-        sms_variants=sms_variants
+        sms_variants=sms_variants,
+
+        # Voice eligibility stub (future phase — not implemented yet)
+        voice_eligible=voice_eligible,
+        voice_ineligible_reason=None if voice_eligible else voice_reason,
     )

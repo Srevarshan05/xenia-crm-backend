@@ -1,10 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""
+Xenia CRM – Campaigns Router
+Full campaign lifecycle: draft → reviewed → awaiting_approval → approved → launched → completed
+
+Campaign Dispatch Flow:
+  POST /launch → creates Communication records → queues dispatch as BackgroundTask → returns 202
+  BackgroundTask → sends batches to Service B → Service B fires webhook callbacks back to Xenia
+  Webhooks → update Communication status with event precedence → trigger attribution
+"""
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Dict, Any
+from typing import List
 import uuid
 from uuid import UUID
-import httpx
 import logging
 from datetime import datetime, timezone
 
@@ -14,38 +23,36 @@ from app.models.customer import Customer, CustomerSegment, CustomerMetrics
 from app.models.promotion import Promotion
 from app.schemas.campaigns import CampaignCreate, CampaignStatusUpdate, CampaignResponse, SimulationDetail, MetricsDetail
 from app.services.simulation import CampaignSimulationService
-from app.services.attribution import RevenueAttributionService
+from app.services.dispatch import dispatch_campaign_messages
 
 logger = logging.getLogger("xenia.campaign_router")
 router = APIRouter(prefix="/api/campaigns", tags=["Campaigns"])
 
-# Channel Service endpoint
-CHANNEL_SERVICE_URL = "http://localhost:8001/send"
 
 @router.get("", response_model=List[CampaignResponse])
 def list_campaigns(status: str = None, db: Session = Depends(get_db)):
     """
     GET /api/campaigns
-    List all campaigns with optional status filtering.
+    List all campaigns with optional status filter.
     """
     query = db.query(Campaign)
     if status:
         query = query.filter(Campaign.status == status)
-    campaigns = query.order_by(Campaign.created_at.desc()).all()
-    return campaigns
+    return query.order_by(Campaign.created_at.desc()).all()
+
 
 @router.post("", response_model=CampaignResponse)
 def create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
     """
     POST /api/campaigns
-    Create a new campaign.
+    Create a new campaign draft. Promotion must exist in DB if provided —
+    Xenia does not create promotions, only recommends existing ones.
     """
-    # Verify promotion exists if provided
     if payload.promotion_id:
         promo = db.query(Promotion).filter(Promotion.promotion_id == payload.promotion_id).first()
         if not promo:
-            raise HTTPException(status_code=404, detail="Promotion not found")
-            
+            raise HTTPException(status_code=404, detail="Promotion not found. Promotions must be created by CRM users first.")
+
     campaign = Campaign(
         name=payload.name,
         objective=payload.objective,
@@ -55,42 +62,70 @@ def create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
         target_segment=payload.target_segment,
         target_audience_size=payload.target_audience_size or 0,
         message_template=payload.message_template,
-        message_variants=payload.message_variants
+        message_variants=payload.message_variants,
+        ai_strategy=payload.ai_strategy,
     )
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    
+
     # Run initial simulation
     try:
         CampaignSimulationService.run_simulation(db, campaign.campaign_id)
         db.refresh(campaign)
     except Exception as e:
-        logger.error(f"Failed to run initial simulation: {e}")
-        
+        logger.error(f"Simulation failed for new campaign {campaign.campaign_id}: {e}")
+
     return campaign
+
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
 def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
-    """
-    GET /api/campaigns/{campaign_id}
-    Get campaign details.
-    """
+    """GET /api/campaigns/{campaign_id}"""
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return campaign
+
+
+@router.put("/{campaign_id}", response_model=CampaignResponse)
+def update_campaign(campaign_id: UUID, payload: CampaignCreate, db: Session = Depends(get_db)):
+    """
+    PUT /api/campaigns/{campaign_id}
+    Update campaign details (e.g. name, channel, message_template).
+    """
+    campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign.name = payload.name
+    if payload.objective is not None:
+        campaign.objective = payload.objective
+    campaign.channel = payload.channel
+    if payload.message_template is not None:
+        campaign.message_template = payload.message_template
+    if payload.promotion_id is not None:
+        campaign.promotion_id = payload.promotion_id
+    campaign.target_segment = payload.target_segment
+    if payload.target_audience_size is not None:
+        campaign.target_audience_size = payload.target_audience_size
+
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
 
 @router.patch("/{campaign_id}/status", response_model=CampaignResponse)
 def update_campaign_status(campaign_id: UUID, payload: CampaignStatusUpdate, db: Session = Depends(get_db)):
     """
     PATCH /api/campaigns/{campaign_id}/status
-    Updates the lifecycle status of a campaign.
+    Advance campaign lifecycle status.
+    Valid transitions: draft → reviewed → awaiting_approval → approved → launched → completed
     """
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
+
     campaign.status = payload.status
     if payload.status == "completed":
         campaign.completed_at = datetime.now(timezone.utc)
@@ -98,60 +133,75 @@ def update_campaign_status(campaign_id: UUID, payload: CampaignStatusUpdate, db:
     db.refresh(campaign)
     return campaign
 
+
 @router.post("/{campaign_id}/simulate", response_model=CampaignResponse)
 def simulate_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
-    """
-    POST /api/campaigns/{campaign_id}/simulate
-    Triggers/refreshes campaign simulation using Xenia AI.
-    """
+    """POST /api/campaigns/{campaign_id}/simulate — refresh simulation projections."""
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
+
     CampaignSimulationService.run_simulation(db, campaign_id)
     db.refresh(campaign)
     return campaign
 
-@router.post("/{campaign_id}/launch", response_model=CampaignResponse)
-def launch_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
+
+@router.post("/{campaign_id}/launch")
+def launch_campaign(
+    campaign_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     """
     POST /api/campaigns/{campaign_id}/launch
-    Launches a campaign:
-    1. Fetches target customers belonging to target_segment.
-    2. Populates the communications table (pending messages).
-    3. Triggers async delivery simulation in channel-service.
-    4. Updates campaign status to 'launched'.
+    Launches a campaign asynchronously:
+      1. Validates campaign is in a launchable state
+      2. Fetches target audience from segment
+      3. Creates Communication records (batch)
+      4. Enqueues dispatch as a BackgroundTask → returns 202 immediately
+      5. Dispatch worker sends batches to Service B → Service B fires webhook callbacks
+
+    Returns 202 Accepted immediately — delivery events arrive via webhook.
     """
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
-    if campaign.status in ["launched", "completed"]:
-        raise HTTPException(status_code=400, detail=f"Campaign is already in '{campaign.status}' state.")
 
-    # 1. Fetch targeted customer segment
+    if campaign.status in ["launched", "completed"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Campaign is already '{campaign.status}'. Cannot re-launch."
+        )
+
+    # ── Step 1: Resolve target audience ──────────────────────────────────────
     segment_customers = db.query(Customer).join(
         CustomerSegment, Customer.customer_id == CustomerSegment.customer_id
-    ).filter(CustomerSegment.segment_name == campaign.target_segment).all()
-    
-    # Fallback if segment is empty, fetch some customers for demo
-    if not segment_customers:
-        logger.warning(f"No customers in segment '{campaign.target_segment}', falling back to random cohort...")
-        segment_customers = db.query(Customer).order_by(text("random()")).limit(10).all()
-        
-    if not segment_customers:
-        raise HTTPException(status_code=400, detail="Cannot launch campaign: target audience is empty.")
+    ).filter(
+        CustomerSegment.segment_name == campaign.target_segment
+    ).all()
 
-    # Update audience size
+    # Fallback for demo: use a small random cohort if segment is empty
+    if not segment_customers:
+        logger.warning(
+            f"No customers in segment '{campaign.target_segment}'. "
+            f"Falling back to 20-customer demo cohort."
+        )
+        segment_customers = db.query(Customer).order_by(text("random()")).limit(20).all()
+
+    if not segment_customers:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot launch campaign: target audience is empty."
+        )
+
+    # ── Step 2: Create Communication records ──────────────────────────────────
     campaign.target_audience_size = len(segment_customers)
 
-    # 2. Populate communications table (batch insert for performance)
-    comm_objects = []
+    comm_objects: list[Communication] = []
     for customer in segment_customers:
-        # Personalize copy
-        message_text = campaign.message_template or "Hello {name}, checkout our new offers!"
-        message_text = message_text.replace("{name}", customer.name)
-        
+        message_text = (campaign.message_template or "Hello {name}, check out our exclusive offers!")
+        message_text = message_text.replace("{name}", customer.name.split()[0])
+
         comm = Communication(
             campaign_id=campaign.campaign_id,
             customer_id=customer.customer_id,
@@ -161,79 +211,92 @@ def launch_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
             created_at=datetime.now(timezone.utc)
         )
         db.add(comm)
-        comm_objects.append((comm, customer, message_text))
-    
-    # Single flush to assign UUIDs without committing yet
+        comm_objects.append(comm)
+
+    # Flush to get UUIDs without committing — we need IDs for the dispatch payload
     db.flush()
-    
-    outbound_messages = []
-    for comm, customer, message_text in comm_objects:
-        outbound_messages.append({
+
+    # ── Step 3: Build dispatch payload ────────────────────────────────────────
+    # Map comm objects to a serializable format before session closes
+    outbound_messages = [
+        {
             "communication_id": str(comm.communication_id),
-            "customer_id": str(customer.customer_id),
-            "channel": campaign.channel,
-            "message": message_text
-        })
-        
-    # 3. Trigger async delivery in channel-service
-    payload = {
-        "campaign_id": str(campaign.campaign_id),
-        "messages": outbound_messages
-    }
-    
-    try:
-        response = httpx.post(CHANNEL_SERVICE_URL, json=payload, timeout=5.0)
-        logger.info(f"Triggered channel service: {response.status_code} - {response.text}")
-    except Exception as e:
-        logger.error(f"Could not connect to Channel Service at {CHANNEL_SERVICE_URL}. Running stub locally: {e}")
-        # Transition anyway for demonstration resilience
-        
-    # 4. Advance lifecycle status
+            "customer_id": str(comm.customer_id),
+            "channel": comm.channel,
+            "message": comm.message_sent or ""
+        }
+        for comm in comm_objects
+    ]
+
+    # ── Step 4: Advance campaign status + initialize metrics ──────────────────
     campaign.status = "launched"
     campaign.launched_at = datetime.now(timezone.utc)
-    
-    # Initialize metrics
-    metrics = db.query(CampaignMetrics).filter(CampaignMetrics.campaign_id == campaign.campaign_id).first()
+
+    metrics = db.query(CampaignMetrics).filter(
+        CampaignMetrics.campaign_id == campaign.campaign_id
+    ).first()
     if not metrics:
         metrics = CampaignMetrics(
             campaign_id=campaign.campaign_id,
             total_sent=len(segment_customers)
         )
         db.add(metrics)
-        
+
     db.commit()
     db.refresh(campaign)
-    return campaign
+
+    # ── Step 5: Enqueue dispatch as background task ───────────────────────────
+    # Returns 202 immediately — delivery proceeds asynchronously
+    background_tasks.add_task(
+        dispatch_campaign_messages,
+        db,
+        str(campaign.campaign_id),
+        outbound_messages
+    )
+
+    logger.info(
+        f"Campaign '{campaign.name}' launched. "
+        f"{len(outbound_messages)} messages queued for dispatch."
+    )
+
+    return {
+        "campaign_id": str(campaign.campaign_id),
+        "name": campaign.name,
+        "status": "launched",
+        "recipients_queued": len(outbound_messages),
+        "message": "Campaign dispatched. Delivery events will arrive via webhook callbacks."
+    }
+
 
 @router.get("/{campaign_id}/analytics")
 def get_campaign_analytics(campaign_id: UUID, db: Session = Depends(get_db)):
     """
     GET /api/campaigns/{campaign_id}/analytics
-    Returns full funnel analytics for a launched/completed campaign.
+    Returns funnel metrics. Attribution is updated via webhook events, not on every GET.
     """
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
-    # Read metrics directly from DB - attribution runs via webhook callbacks, not on every GET
 
     metrics = campaign.metrics
     if not metrics:
         return {
-            "campaign_id": campaign.campaign_id,
+            "campaign_id": str(campaign.campaign_id),
             "name": campaign.name,
-            "funnel": {"sent": 0, "delivered": 0, "opened": 0, "clicked": 0, "promo_applied": 0, "purchased": 0, "failed": 0},
+            "funnel": {
+                "sent": 0, "delivered": 0, "opened": 0,
+                "clicked": 0, "promo_applied": 0, "purchased": 0, "failed": 0
+            },
             "metrics": {
-                "attributed_revenue": 0.0,
-                "estimated_cost": 0.0,
-                "roi": 0.0,
-                "conversion_rate": 0.0
+                "attributed_revenue": 0.0, "estimated_cost": 0.0,
+                "roi": 0.0, "conversion_rate": 0.0
             }
         }
-        
+
     return {
-        "campaign_id": campaign.campaign_id,
+        "campaign_id": str(campaign.campaign_id),
         "name": campaign.name,
+        "status": campaign.status,
         "funnel": {
             "sent": metrics.total_sent,
             "delivered": metrics.total_delivered,
@@ -251,36 +314,42 @@ def get_campaign_analytics(campaign_id: UUID, db: Session = Depends(get_db)):
         }
     }
 
+
 from app.models.order import Order
 
+
 @router.get("/{campaign_id}/recipients")
-def get_campaign_recipients(campaign_id: UUID, page: int = 1, limit: int = 50, db: Session = Depends(get_db)):
+def get_campaign_recipients(
+    campaign_id: UUID,
+    page: int = 1,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
     """
     GET /api/campaigns/{campaign_id}/recipients
-    Returns paginated individual shopper-level communications and their status/attributed orders.
+    Paginated shopper-level delivery status with lifecycle timestamps.
     """
     campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
+
     offset = (page - 1) * limit
     comms = db.query(Communication).filter(
         Communication.campaign_id == campaign_id
     ).order_by(Communication.created_at.desc()).offset(offset).limit(limit).all()
-    
-    results = []
-    # Bulk-fetch attributed orders for all comms in one query (eliminates N+1)
+
+    # Bulk-fetch attributed orders — eliminates N+1
     comm_ids = [c.communication_id for c in comms]
     orders_by_comm = {}
     if comm_ids:
-        comm_orders = db.query(Order).filter(Order.attributed_communication_id.in_(comm_ids)).all()
-        for order in comm_orders:
+        for order in db.query(Order).filter(Order.attributed_communication_id.in_(comm_ids)).all():
             orders_by_comm[order.attributed_communication_id] = {
                 "order_id": str(order.order_id),
                 "total_amount": float(order.total_amount),
                 "order_date": order.order_date
             }
-    
+
+    results = []
     for c in comms:
         results.append({
             "communication_id": str(c.communication_id),
@@ -288,21 +357,34 @@ def get_campaign_recipients(campaign_id: UUID, page: int = 1, limit: int = 50, d
                 "customer_id": str(c.customer.customer_id),
                 "name": c.customer.name,
                 "email": c.customer.email,
-                "city": c.customer.city
+                "city": c.customer.city,
+                "lifetime_value": float(c.customer.metrics.total_spend or 0.0) if c.customer.metrics else 0.0,
+                "last_purchase_days": int(c.customer.metrics.days_since_last_order or 0) if c.customer.metrics else 0,
+                "churn_probability": float(c.customer.metrics.churn_probability or 0.0) if c.customer.metrics else 0.0,
+                "preferred_channel": c.customer.metrics.preferred_channel or "WhatsApp" if c.customer.metrics else "WhatsApp",
+                "top_category": c.customer.metrics.top_category if c.customer.metrics else None,
+                "total_orders": c.customer.metrics.total_orders if c.customer.metrics else 0,
             },
             "channel": c.channel,
             "status": c.status,
-            "created_at": c.created_at,
+            # Lifecycle timestamps for funnel timing analysis
+            "timeline": {
+                "created_at": c.created_at,
+                "sent_at": c.sent_at,
+                "delivered_at": c.delivered_at,
+                "opened_at": c.opened_at,
+                "clicked_at": c.clicked_at,
+                "promo_applied_at": c.promo_applied_at,
+            },
             "attributed_order": orders_by_comm.get(c.communication_id)
         })
-        
-    # Get total count for pagination
+
     total_count = db.query(Communication).filter(Communication.campaign_id == campaign_id).count()
-    
+
     return {
         "recipients": results,
         "total_count": total_count,
         "page": page,
-        "limit": limit
+        "limit": limit,
+        "pages": (total_count + limit - 1) // limit
     }
-

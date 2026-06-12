@@ -102,8 +102,9 @@ def run_integration_tests():
             op_id = str(test_opportunity.opportunity_id)
             logger.info(f"\n=== Test 8: Get Opportunity & Explain ({op_id}) ===")
             res = client.get(f"/api/opportunities/{op_id}")
-            logger.info(f"Response: {res.status_code} - Type: {res.json().get('type')}")
-            logger.info(f"AI Explanation Snippet: {res.json().get('ai_explanation')[:100]}...")
+            data = res.json()
+            logger.info(f"Response: {res.status_code} - Type: {data.get('internal_type')}")
+            logger.info(f"AI Explanation Snippet: {data.get('why_generated')[:100] if data.get('why_generated') else ''}...")
             if res.status_code != 200:
                 errors += 1
                 

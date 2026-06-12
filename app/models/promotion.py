@@ -28,13 +28,19 @@ class Promotion(Base):
     promo_code: Mapped[str | None] = mapped_column(String(50), unique=True)
 
     # ── New Fields for Rule Enforcement & Tracking ────────────────────────────
-    discount_type: Mapped[str] = mapped_column(String(50), nullable=False, default="Percentage") # Percentage, Fixed Amount, Free Shipping, etc.
+    discount_type: Mapped[str] = mapped_column(String(50), nullable=False, default="Percentage") # Percentage, Fixed Amount, Buy X Get Y, Free Shipping
     discount_value: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal("0.00"))
+    max_discount_cap: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     applicable_categories: Mapped[str] = mapped_column(Text, nullable=False, default="ALL") # "ALL" or comma-separated list
     applicable_cities: Mapped[str] = mapped_column(Text, nullable=False, default="ALL") # "ALL" or comma-separated list
+    applicable_segments: Mapped[str] = mapped_column(Text, nullable=False, default="ALL") # "ALL" or comma-separated list
     start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_usage_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    per_shopper_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_budget: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    priority: Mapped[str] = mapped_column(String(50), nullable=False, default="Standard") # Standard, Preferred, Priority, Featured
+    allow_xenia_recommendations: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     
     # ── Performance Tracking Columns ───────────────────────────────────────────
     times_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

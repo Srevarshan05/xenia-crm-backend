@@ -620,6 +620,72 @@ class XeniaAIService:
         return new_query
 
     @classmethod
+    def generate_fallback_campaign_name(cls, goal: str, context: dict) -> str:
+        goal_lower = goal.lower()
+        
+        # Extract details from context
+        city = context.get("city_filter")
+        category = context.get("category_filter")
+        
+        # 1. Match precise example pattern combinations first
+        if "bring back vip" in goal_lower or ("vip" in goal_lower and ("winback" in goal_lower or "win back" in goal_lower or "bring back" in goal_lower)):
+            return "VIP Customer Re-engagement Campaign"
+        if "chennai" in goal_lower and "electronics" in goal_lower:
+            return "Chennai Electronics Weekend Sale"
+        if "sports" in goal_lower and ("winback" in goal_lower or "win back" in goal_lower or "bring back" in goal_lower or "reactivation" in goal_lower):
+            return "Win Back High Value Sports Shoppers"
+        if "beauty" in goal_lower and "loyalty" in goal_lower:
+            return "Beauty Category Loyalty Boost Campaign"
+        if "mumbai" in goal_lower and ("fashion" in goal_lower or "clothing" in goal_lower or "flash" in goal_lower):
+            return "Mumbai Fashion Flash Sale"
+        if "inactive premium" in goal_lower or ("inactive" in goal_lower and "premium" in goal_lower):
+            return "Inactive Premium Customers Reactivation Drive"
+            
+        # 2. General fallback builder
+        prefix = "Marketing Initiative"
+        if "vip" in goal_lower or "champion" in goal_lower:
+            prefix = "VIP Customer Re-engagement Campaign"
+        elif "winback" in goal_lower or "win back" in goal_lower or "bring back" in goal_lower:
+            prefix = "Win Back High Value Shoppers"
+        elif "inactive" in goal_lower or "churn" in goal_lower or "dormant" in goal_lower or "recovery" in goal_lower:
+            prefix = "Inactive Customer Recovery Drive"
+        elif "cross_sell" in goal_lower or "cross sell" in goal_lower or "repeat" in goal_lower:
+            prefix = "Repeat Purchase Booster"
+        elif "loyal" in goal_lower or "appreciation" in goal_lower:
+            prefix = "Loyal Shopper Appreciation Campaign"
+            
+        # Add category suffix
+        cat_suffix = ""
+        if category:
+            if "electronics" in category.lower():
+                cat_suffix = "Electronics"
+            elif "groceries" in category.lower() or "grocery" in category.lower():
+                cat_suffix = "Grocery"
+            elif "sports" in category.lower():
+                cat_suffix = "Sports"
+            elif "beauty" in category.lower():
+                cat_suffix = "Beauty"
+            elif "clothing" in category.lower() or "fashion" in category.lower():
+                cat_suffix = "Fashion"
+            else:
+                cat_suffix = category.capitalize()
+                
+        if city and cat_suffix:
+            return f"{city} {cat_suffix} Weekend Sale"
+        elif city and prefix != "Marketing Initiative":
+            return f"{city} {prefix}"
+        elif cat_suffix and prefix != "Marketing Initiative":
+            return f"{cat_suffix} Category {prefix}"
+        elif prefix != "Marketing Initiative":
+            return prefix
+        elif city:
+            return f"{city} Retail Growth Campaign"
+        elif cat_suffix:
+            return f"{cat_suffix} Category Boost Initiative"
+            
+        return "Xenia Personalized Customer Outreach"
+
+    @classmethod
     def generate_campaign_strategy(cls, goal: str, context: dict) -> dict:
         """
         Formulates a marketing campaign strategy draft (including segment name, recommended channel, 
@@ -653,11 +719,13 @@ class XeniaAIService:
         2. Average inactivity level (e.g. if inactivity is moderate, deeper discounts are unnecessary).
         3. Historical promotion performance (ROI and conversion rates).
         If none fits, recommend null.
+
+        CRITICAL REQUIREMENT: Avoid any AI-centric, ML-centric, or technical CRM labels (e.g. 'Winback', 'Channel Push', 'Reactivation', 'Cross Sell', 'Fatigue Suppression', 'LLM', 'AI', 'Gemini'). Instead, generate business-friendly marketing initiative names of 4-6 words. Generate campaign_name based on Suggested Action, Audience Type, Category, Promotion, City, and Objective. Avoid generic prefixes like 'Growth Blitz:' or 'Address Opportunity:'. Examples: 'VIP Customer Re-engagement Campaign', 'Chennai Electronics Weekend Sale', 'Win Back High Value Sports Shoppers', 'Beauty Category Loyalty Boost Campaign', 'Mumbai Fashion Flash Sale', 'Inactive Premium Customers Reactivation Drive'. The copy should feel like it was created by a real marketing team, not an AI output.
         
         Provide your response as a JSON object matching this schema:
         {{
-            "campaign_name": "A catchy, professional campaign name (e.g. 'Chennai Tech Elite Upgrade Blast')",
-            "target_segment": "A concise label for the audience segment (e.g., 'Chennai Electronics Champions')",
+            "campaign_name": "A professional marketing initiative name of 4-6 words (e.g. 'VIP Customer Re-engagement Campaign', 'Chennai Electronics Weekend Sale')",
+            "target_segment": "A concise, non-technical marketing label for the audience segment (e.g., 'Chennai Electronics Shoppers')",
             "channel": "The most effective channel for this campaign. Must be one of: 'WhatsApp', 'Email', or 'SMS'.",
             "message_template": "The primary marketing copy template for the recommended channel. Use {{name}} placeholder.",
             "message_variants": [
@@ -672,7 +740,7 @@ class XeniaAIService:
                 "why_channel": "Why this channel is recommended based on preferred channel distribution...",
                 "why_promotion": "Why this promotion was selected (evaluating affinities, inactivity level, and historical ROI/CTR)..."
             }},
-            "whatsapp_template": "A friendly, conversational WhatsApp message template with emojis. Use {{name}} placeholder.",
+            "whatsapp_template": "A friendly, conversational WhatsApp message template. Use {{name}} placeholder.",
             "whatsapp_variants": [
                 "Alternative A/B WhatsApp variant 1. Use {{name}}.",
                 "Alternative A/B WhatsApp variant 2. Use {{name}}."
@@ -706,8 +774,9 @@ class XeniaAIService:
             # Try to grab the first promo code from the promotions list if any
             first_promo_code = promotions_list[0].get("coupon_code") if promotions_list else None
             promo_name = promotions_list[0].get("name") if promotions_list else "Special discount"
+            fallback_name = cls.generate_fallback_campaign_name(goal, context)
             return {
-                "campaign_name": f"Growth Blitz: {goal[:40]}",
+                "campaign_name": fallback_name,
                 "target_segment": context.get("audience_description", "Target cohort"),
                 "channel": "WhatsApp",
                 "message_template": f"Hey {{name}}! We have a special offer just for you. Use code {first_promo_code or 'SAVE10'} to get amazing deals! Shop now.",
