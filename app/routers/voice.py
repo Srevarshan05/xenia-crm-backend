@@ -331,44 +331,44 @@ def _build_fallback_script(payload: "VoiceScriptRequest") -> dict:
     if lang == "Tamil":
         if seg == "Champion":
             objective = "Reward loyal Tamil VIP customers"
-            opening = f"வணக்கம்! நான் {brand} பிராண்டில் இருந்து பேசுகிறேன்."
-            main_offer = f"எங்கள் மிகச் சிறந்த வாடிக்கையாளரான உங்களுக்கு, {category}-க்கு விளம்பர குறியீடு {promo}-ஐ பயன்படுத்தி {discount:.0f}% தள்ளுபடி வழங்குகிறோம்."
-            cta = f"உடனே எங்கள் செயலியைப் பயன்படுத்தி {promo} குறியீட்டைப் போடுங்கள்."
+            opening = f"வணக்கம்! நான் {brand} பிராண்டில் இருந்து பேசுகிறேன். எங்களின் வி.ஐ.பி வாடிக்கையாளரான உங்களை தொடர்பு கொள்வதில் மிக்க மகிழ்ச்சி."
+            main_offer = f"உங்களின் ஆதரவிற்கு நன்றி செலுத்தும் வகையில், எங்களின் புதிய {category}-க்கு விளம்பர குறியீடு {promo}-ஐ பயன்படுத்தி {discount:.0f}% சிறப்பு தள்ளுபடி வழங்குகிறோம்."
+            cta = f"உடனே எங்களின் மொபைல் செயலியைப் பயன்படுத்தி, செக்அவுட்டில் {promo} என்ற விளம்பர குறியீட்டைப் போடுங்கள்."
             closing = "எங்கள் மீது வைத்துள்ள நம்பிக்கைக்கு நன்றி, வணக்கம்."
         else:
             objective = "Win back high-value Tamil customers"
-            opening = f"வணக்கம்! நான் {brand} பிராண்டில் இருந்து பேசுகிறேன். உங்களை மிகவும் இழக்கிறோம்."
-            main_offer = f"மீண்டும் உங்களை வரவேற்க, {category}-க்கு விளம்பர குறியீடு {promo}-ஐ பயன்படுத்தி {discount:.0f}% தள்ளுபடி தருகிறோம்."
-            cta = f"இன்றே எங்கள் செயலியைப் பயன்படுத்தி ஆர்டர் செய்யுங்கள்."
+            opening = f"வணக்கம்! நான் {brand} பிராண்டில் இருந்து பேசுகிறேன். உங்களை போன்ற ஒரு சிறந்த வாடிக்கையாளரை நாங்கள் மிகவும் இழக்கிறோம்."
+            main_offer = f"உங்களை மீண்டும் வரவேற்கும் முகமாக, {category}-க்கு விளம்பர குறியீடு {promo}-ஐ பயன்படுத்தி {discount:.0f}% தள்ளுபடி தருகிறோம்."
+            cta = f"இன்றே எங்களின் மொபைல் செயலியைத் திறந்து, ஆர்டர் செய்யும்போது {promo} குறியீட்டைப் பயன்படுத்துங்கள்."
             closing = "நன்றி, மீண்டும் வாருங்கள்!"
         full_script = f"{opening} {main_offer} {cta} {closing}"
 
     elif lang == "Hindi":
         if seg == "Champion":
             objective = "Reward loyal Hindi VIP customers"
-            opening = f"नमस्ते! मैं {brand} से बात कर रहा हूँ।"
-            main_offer = f"हमारे सबसे खास ग्राहक होने के नाते, आपको प्रोमो कोड {promo} का उपयोग करके {category} पर {discount:.0f}% की विशेष छूट मिल रही है।"
-            cta = f"कृपया अभी हमारे ऐप पर जाएं और ऑर्डर करते समय {promo} कोड का उपयोग करें।"
+            opening = f"नमस्ते! मैं {brand} से बात कर रहा हूँ। हमारे सबसे खास वी.आई.पी ग्राहक होने के नाते, आज आपसे संपर्क करके हमें बेहद खुशी हो रही है।"
+            main_offer = f"हमारे साथ जुड़े रहने के लिए धन्यवाद देने के लिए, हम आपको {category} पर प्रोमो कोड {promo} का उपयोग करके {discount:.0f}% की विशेष छूट दे रहे हैं।"
+            cta = f"कृपया अभी हमारे मोबाइल ऐप पर जाएं और ऑर्डर करते समय {promo} कोड का उपयोग करें।"
             closing = "हमारे साथ जुड़े रहने के लिए धन्यवाद, नमस्ते।"
         else:
             objective = "Win back high-value Hindi customers"
-            opening = f"नमस्ते! मैं {brand} से बात कर रहा हूँ। हम आपको बहुत याद कर रहे हैं।"
+            opening = f"नमस्ते! मैं {brand} से बात कर रहा हूँ। हम आपको बहुत याद कर रहे हैं और आशा करते हैं कि आप स्वस्थ होंगे।"
             main_offer = f"स्वागत उपहार के रूप में, आपको प्रोमो कोड {promo} का उपयोग करके {category} पर {discount:.0f}% की छूट मिल रही है।"
-            cta = f"आज ही हमारी ऐप खोलें और इस विशेष ऑफर का लाभ उठाएं।"
+            cta = f"आज ही हमारी मोबाइल ऐप खोलें, अपने पसंदीदा उत्पाद चुनें और {promo} कोड का उपयोग करके ऑर्डर करें।"
             closing = "धन्यवाद, आपका दिन शुभ हो।"
         full_script = f"{opening} {main_offer} {cta} {closing}"
 
     elif lang == "English + Tamil":
         if seg == "Champion":
             objective = "Reward loyal VIP customers in Tanglish"
-            opening = f"Hello! Naanga {brand}-la irundhu call panrom."
-            main_offer = f"Neenga namma VIP customer. Adhaan ungaluku {category}-la {discount:.0f}% discount tharrom."
+            opening = f"Hello! Naanga {brand}-la irundhu call panrom. Namma active and loyal VIP customer-a irukkuradhuku ungaluku namma nandri."
+            main_offer = f"Ungaloda support-a celebrate panna, ungaluku pidicha {category}-la {discount:.0f}% special discount tharrom. Adhuku promo code {promo} use pannunga."
             cta = f"Checkout la promo code {promo} apply panni order pannunga."
             closing = "Thanks for shopping with us. Nandri!"
         else:
             objective = "Win back high-value customers in Tanglish"
-            opening = f"Hello! Naanga {brand}-la irundhu call panrom. We missed you!"
-            main_offer = f"Special welcome-back gift-a {category}-la {discount:.0f}% discount tharrom."
+            opening = f"Hello! Naanga {brand}-la irundhu call panrom. We really missed you and romba naala ungaluku call பண்ண முடியல."
+            main_offer = f"Ungala welcome back panna, oru special gift-a ungaluku pidicha {category}-la {discount:.0f}% discount tharrom. Namma promo code {promo}-ஐ use pannunga."
             cta = f"Namma app open panni, {promo} code use panni order pannunga."
             closing = "Thank you so much. Nandri!"
         full_script = f"{opening} {main_offer} {cta} {closing}"
@@ -376,14 +376,14 @@ def _build_fallback_script(payload: "VoiceScriptRequest") -> dict:
     elif lang == "English + Hindi":
         if seg == "Champion":
             objective = "Reward loyal VIP customers in Hinglish"
-            opening = f"Hello! Hum {brand} se baat kar rahe hain."
-            main_offer = f"Aap hamare VIP customer hain. Isiliye hum aapko {category} par {discount:.0f}% ki special discount de rahe hain."
+            opening = f"Hello! Hum {brand} se baat kar rahe hain. Aap hamare loyal VIP customer hain aur aapka support hamare liye bahut special hai."
+            main_offer = f"Aapki shopping ko aur behtar banane ke liye, hum aapko {category} par {discount:.0f}% ki special discount de rahe hain. Iske liye aap promo code {promo} use kar sakte hain."
             cta = f"Bas app par jaake checkout ke waqt promo code {promo} apply karein."
             closing = "Humare saath bane rehne ke liye dhanyavaad!"
         else:
             objective = "Win back high-value customers in Hinglish"
-            opening = f"Hello! Hum {brand} se baat kar rahe hain. We miss you!"
-            main_offer = f"Aapke liye special welcome back gift hai, {category} par {discount:.0f}% discount."
+            opening = f"Hello! Hum {brand} se baat kar rahe hain. Hum aapko bahut miss kar rahe hain aur aasha karte hain ki aap thik honge."
+            main_offer = f"Aapke liye special welcome back gift hai, {category} par {discount:.0f}% discount promo code {promo} use karke."
             cta = f"Aaj hi hamari app par jaakar promo code {promo} use karke order karein."
             closing = "Thank you and dhanyavaad!"
         full_script = f"{opening} {main_offer} {cta} {closing}"
@@ -391,16 +391,16 @@ def _build_fallback_script(payload: "VoiceScriptRequest") -> dict:
     else:
         if seg == "Champion":
             objective = f"Reward loyal {brand} shoppers with an exclusive VIP offer"
-            opening = f"Hello! This is {brand} calling."
-            main_offer = f"As a loyal VIP customer, we want to offer you {discount:.0f}% off on {category} using promo code {promo}."
-            cta = f"Visit our app and apply {promo} at checkout."
+            opening = f"Hello! This is {brand} calling. As one of our most valued VIP customers, we want to personally thank you for your loyalty."
+            main_offer = f"To celebrate our relationship, we are offering you a special {discount:.0f}% discount on {category} using the promo code {promo}."
+            cta = f"Visit our mobile app and apply the code {promo} at checkout."
             closing = "Thank you for being a valued customer!"
         else:
             objective = f"Win back high-value {brand} customers with a personalized incentive"
-            opening = f"Hello! This is {brand} calling. We miss you!"
-            main_offer = f"As a welcome-back gift, we are offering you {discount:.0f}% off on {category} using promo code {promo}."
-            cta = f"Visit our app and apply {promo} at checkout."
-            closing = "Thank you for choosing us."
+            opening = f"Hello! This is {brand} calling. We have missed you lately and wanted to reach out to welcome you back to our community."
+            main_offer = f"As a welcome-back gift, we are offering you a special {discount:.0f}% discount on {category} using the promo code {promo}."
+            cta = f"Visit our app and apply {promo} during checkout."
+            closing = "Thank you for choosing us, and we hope to see you shopping soon."
         full_script = f"{opening} {main_offer} {cta} {closing}"
 
     return {
@@ -467,16 +467,16 @@ def generate_voice_script(payload: VoiceScriptRequest):
 
     prompt = (
         f"You are a voice script writer for a retail brand called {payload.brand_name}. "
-        f"Write a VERY CONCISE voice call advertisement script optimized for ElevenLabs Text-to-Speech. "
+        f"Write an engaging, natural voice call advertisement script optimized for ElevenLabs Text-to-Speech. "
         f"AUDIENCE: {payload.audience_segment} customers, avg LTV Rs {payload.avg_ltv:,.0f}, "
         f"avg inactivity {payload.avg_inactivity_days:.0f} days, "
         f"top category: {payload.top_category or 'general retail'}. "
         f"GOAL: {payload.campaign_goal}. "
         f"PROMOTION: {discount_str if discount_str else 'exclusive offer'}. "
         f"TONE: {tone_guidance}. LANGUAGE: {payload.language}. {lang_constraints} "
-        f"REQUIREMENTS: Exactly between 25 and 35 words (this corresponds to exactly 2-3 lines of text, or 10-15 seconds of speech). "
-        f"The full script MUST be between 25 and 35 words. Natural human speech. No aggressive sales language. "
-        f"One offer, one clear call to action. Keep brand name like '{payload.brand_name}' and promo code '{payload.promo_code}' in English/Latin script. "
+        f"REQUIREMENTS: The script MUST be exactly between 45 and 65 words (this corresponds to exactly 3-4 lines of text in the user interface, or 20-25 seconds of speech). "
+        f"The full script MUST be between 45 and 65 words, natural, and friendly. No aggressive sales language. "
+        f"One offer, one clear call to action. Keep brand name like '{payload.brand_name}' and promo code '{payload.promo_code}' in English/Latin script, but EVERYTHING ELSE MUST BE STRICTLY TRANSLATED AND WRITTEN IN THE SELECTED LANGUAGE ({payload.language}). "
         f"Return ONLY valid JSON: "
         f'{"{"}"call_objective": "...", "opening": "...", "main_offer": "...", "closing": "...", "cta": "...", "full_script": "..."{"}"}'
     )

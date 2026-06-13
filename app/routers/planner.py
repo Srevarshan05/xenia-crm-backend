@@ -91,6 +91,9 @@ def is_promotion_eligible(promo: Promotion, category_filter: str | None, city_fi
             
     return True
 
+# Cap to 2000 rows max for all audience cohort queries — prevents loading entire DB into memory
+_AUDIENCE_CAP = 2000
+
 def get_audience_cohort(db: Session, filters: dict):
     city_filter = filters.get("city")
     category_filter = filters.get("category")
@@ -113,8 +116,9 @@ def get_audience_cohort(db: Session, filters: dict):
         query = query.filter(CustomerMetrics.churn_probability <= float(max_churn_filter))
     if segment_filter:
         query = query.filter(Customer.segments.any(CustomerSegment.segment_name.ilike(f"%{segment_filter}%")))
-        
-    all_matching = query.all()
+
+    # ── Cap at _AUDIENCE_CAP rows at the DB level — avoids pulling 500K rows into memory ──
+    all_matching = query.limit(_AUDIENCE_CAP).all()
     
     # Fallback to prevent empty audiences during demo
     if not all_matching:
@@ -284,9 +288,9 @@ def get_prepare_context(opportunity_id: uuid.UUID, db: Session = Depends(get_db)
             }
         )
         
-    # 4. Fetch shopper list (first 100 eligible shoppers for browse/drilldown)
+    # 4. Fetch shopper list (first 50 eligible shoppers for browse/drilldown — capped for speed)
     shopper_previews = []
-    for c in eligible_customers[:100]:
+    for c in eligible_customers[:50]:
         shopper_previews.append(
             ShopperPreview(
                 customer_id=str(c.customer_id),

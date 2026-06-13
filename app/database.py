@@ -14,12 +14,28 @@ from app.config import settings
 
 
 # ── Engine ────────────────────────────────────────────────────────────────────
+# Neon PostgreSQL optimized settings:
+# - pool_size=5: Neon free tier has a 100 connection limit; keep pool small
+# - max_overflow=10: allow bursts up to 15 total connections
+# - pool_recycle=300: recycle connections every 5 min (Neon idle timeout is 5 min)
+# - pool_pre_ping=True: test connections before use to avoid stale conn errors
+# - pool_timeout=30: wait up to 30s for a connection from pool before raising
 engine = create_engine(
     settings.database_url,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,       # recycle stale connections
-    echo=settings.debug,      # SQL logging in dev
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    pool_timeout=30,
+    echo=False,            # disable per-query SQL logging (reduces latency overhead)
+    connect_args={
+        "connect_timeout": 10,
+        "application_name": "xenia_crm",
+        "keepalives": 1,
+        "keepalives_idle": 60,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    },
 )
 
 # Enable UUID extension in PostgreSQL
