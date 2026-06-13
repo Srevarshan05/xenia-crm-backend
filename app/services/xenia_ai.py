@@ -641,49 +641,29 @@ class XeniaAIService:
         if "inactive premium" in goal_lower or ("inactive" in goal_lower and "premium" in goal_lower):
             return "Inactive Premium Customers Reactivation Drive"
             
-        # 2. General fallback builder
-        prefix = "Marketing Initiative"
-        if "vip" in goal_lower or "champion" in goal_lower:
-            prefix = "VIP Customer Re-engagement Campaign"
-        elif "winback" in goal_lower or "win back" in goal_lower or "bring back" in goal_lower:
-            prefix = "Win Back High Value Shoppers"
-        elif "inactive" in goal_lower or "churn" in goal_lower or "dormant" in goal_lower or "recovery" in goal_lower:
-            prefix = "Inactive Customer Recovery Drive"
-        elif "cross_sell" in goal_lower or "cross sell" in goal_lower or "repeat" in goal_lower:
-            prefix = "Repeat Purchase Booster"
-        elif "loyal" in goal_lower or "appreciation" in goal_lower:
-            prefix = "Loyal Shopper Appreciation Campaign"
-            
-        # Add category suffix
-        cat_suffix = ""
-        if category:
-            if "electronics" in category.lower():
-                cat_suffix = "Electronics"
-            elif "groceries" in category.lower() or "grocery" in category.lower():
-                cat_suffix = "Grocery"
-            elif "sports" in category.lower():
-                cat_suffix = "Sports"
-            elif "beauty" in category.lower():
-                cat_suffix = "Beauty"
-            elif "clothing" in category.lower() or "fashion" in category.lower():
-                cat_suffix = "Fashion"
-            else:
-                cat_suffix = category.capitalize()
-                
-        if city and cat_suffix:
-            return f"{city} {cat_suffix} Weekend Sale"
-        elif city and prefix != "Marketing Initiative":
-            return f"{city} {prefix}"
-        elif cat_suffix and prefix != "Marketing Initiative":
-            return f"{cat_suffix} Category {prefix}"
-        elif prefix != "Marketing Initiative":
-            return prefix
-        elif city:
-            return f"{city} Retail Growth Campaign"
-        elif cat_suffix:
-            return f"{cat_suffix} Category Boost Initiative"
-            
-        return "Xenia Personalized Customer Outreach"
+    @classmethod
+    def generate_fallback_campaign_name(cls, goal: str, context: dict) -> str:
+        """
+        Builds a simple, jargon-free explanatory campaign title based on the goal, category, and promo context.
+        """
+        goal_lower = goal.lower()
+        category = context.get("category_filter") or ""
+        city = context.get("city_filter") or ""
+        promo_code = context.get("available_promotions", [{}])[0].get("coupon_code") if context.get("available_promotions") else None
+        
+        promo_suffix = f" with {promo_code}" if promo_code else ""
+        cat_str = f" {category}" if category else ""
+        
+        if "winback" in goal_lower or "win back" in goal_lower or "bring back" in goal_lower:
+            return f"Win Back Lapsed{cat_str} Shoppers{promo_suffix}"
+        elif "reactivate" in goal_lower or "inactive" in goal_lower or "dormant" in goal_lower:
+            return f"Re-engage Inactive{cat_str} Shoppers{promo_suffix}"
+        elif "cross_sell" in goal_lower or "cross sell" in goal_lower or "affinity" in goal_lower:
+            return f"Introduce New Items to{cat_str} Buyers{promo_suffix}"
+        elif "fatigue" in goal_lower or "suppress" in goal_lower or "spam" in goal_lower:
+            return "Cooling-off Period for Over-contacted Shoppers"
+        
+        return f"Special Discount for{cat_str} Shoppers{promo_suffix}"
 
     @classmethod
     def generate_campaign_strategy(cls, goal: str, context: dict) -> dict:
@@ -707,6 +687,8 @@ class XeniaAIService:
         - Size: {audience_info.get("size", 0)} shoppers
         - Average Lifetime Spend: INR {audience_info.get("avg_spend", 0.0):,.2f}
         - Average Inactivity (Days): {audience_info.get("avg_inactivity_days", 0)} days
+        - Average Churn Probability: {audience_info.get("avg_churn_probability", 0.0) * 100:.1f}%
+        - Average Purchase Frequency (Orders): {audience_info.get("avg_total_orders", 0.0):.1f} orders
         - Category Affinity Distribution: {json.dumps(audience_info.get("category_affinity_distribution", {}))}
         - City Distribution: {json.dumps(audience_info.get("city_distribution", {}))}
         - Preferred Channel Distribution: {json.dumps(audience_info.get("channel_distribution", {}))}
@@ -720,11 +702,13 @@ class XeniaAIService:
         3. Historical promotion performance (ROI and conversion rates).
         If none fits, recommend null.
 
-        CRITICAL REQUIREMENT: Avoid any AI-centric, ML-centric, or technical CRM labels (e.g. 'Winback', 'Channel Push', 'Reactivation', 'Cross Sell', 'Fatigue Suppression', 'LLM', 'AI', 'Gemini'). Instead, generate business-friendly marketing initiative names of 4-6 words. Generate campaign_name based on Suggested Action, Audience Type, Category, Promotion, City, and Objective. Avoid generic prefixes like 'Growth Blitz:' or 'Address Opportunity:'. Examples: 'VIP Customer Re-engagement Campaign', 'Chennai Electronics Weekend Sale', 'Win Back High Value Sports Shoppers', 'Beauty Category Loyalty Boost Campaign', 'Mumbai Fashion Flash Sale', 'Inactive Premium Customers Reactivation Drive'. The copy should feel like it was created by a real marketing team, not an AI output.
+        CRITICAL REQUIREMENT: Avoid any AI-centric, ML-centric, or technical CRM labels (e.g. 'Winback', 'Channel Push', 'Reactivation', 'Cross Sell', 'Fatigue Suppression', 'LLM', 'AI', 'Gemini'). Generate a business-friendly, easily understandable campaign title of 4-8 words that clearly explains *who* is being reached, *what* category/promotion is offered, and *why* (e.g. 'Re-engage Inactive Beauty Buyers with 15% Off', 'Win Back Lapsed VIP Shoppers with 25% Coupon', 'Introduce Sports Gear to Active Fitness Shoppers'). Avoid generic prefixes like 'Growth Blitz:' or 'Address Opportunity:'. The title should instantly explain the campaign's exact purpose to any reader.
+        DO NOT include any emojis (e.g. no icons, no smileys) in the copy, names, subjects, or explanations.
+        DO NOT use the word "rationale" or "Rationale" in any heading or explanation text.
         
         Provide your response as a JSON object matching this schema:
         {{
-            "campaign_name": "A professional marketing initiative name of 4-6 words (e.g. 'VIP Customer Re-engagement Campaign', 'Chennai Electronics Weekend Sale')",
+            "campaign_name": "A clear, explanatory campaign title of 4-8 words (e.g., 'Re-engage Inactive Beauty Buyers with 15% Off', 'Win Back Lapsed VIP Shoppers with 25% Coupon')",
             "target_segment": "A concise, non-technical marketing label for the audience segment (e.g., 'Chennai Electronics Shoppers')",
             "channel": "The most effective channel for this campaign. Must be one of: 'WhatsApp', 'Email', or 'SMS'.",
             "message_template": "The primary marketing copy template for the recommended channel. Use {{name}} placeholder.",
@@ -735,10 +719,10 @@ class XeniaAIService:
             "recommended_promotion_code": "The coupon code of the selected promotion from the list, or null if none selected",
             "confidence_score": 0.85,
             "ai_explanation": {{
-                "why_audience": "Clear explanation of why this audience was selected based on affinities/dormancy...",
-                "why_now": "Why this campaign is recommended now...",
-                "why_channel": "Why this channel is recommended based on preferred channel distribution...",
-                "why_promotion": "Why this promotion was selected (evaluating affinities, inactivity level, and historical ROI/CTR)..."
+                "why_audience": "Explain why this audience was selected based on their specific metrics (Recency, Frequency, Monetary spend, Churn Probability, category affinities) and why other shoppers were NOT selected. Use plain language, no AI/ML jargon, and no emojis.",
+                "why_now": "Explain why this campaign is recommended now based on inactivity timeframes and why this timing is preferred over others. Use plain language, no AI/ML jargon, and no emojis.",
+                "why_channel": "Explain why this channel is recommended based on preferred channel distributions and why other channels were NOT recommended. Use plain language, no AI/ML jargon, and no emojis.",
+                "why_promotion": "Explain why this specific promotion was chosen from all the available options (evaluating discount value, category affinity match, and margin impact) and why other promotions were NOT chosen. Use plain language, no AI/ML jargon, and no emojis."
             }},
             "whatsapp_template": "A friendly, conversational WhatsApp message template. Use {{name}} placeholder.",
             "whatsapp_variants": [
@@ -787,10 +771,10 @@ class XeniaAIService:
                 "recommended_promotion_code": first_promo_code,
                 "confidence_score": 0.80,
                 "ai_explanation": {
-                    "why_audience": "This audience exhibits moderate inactivity but has strong LTV and high historical engagement.",
-                    "why_now": "Prompt engagement is required before the cohort drifts completely into the churn zone.",
-                    "why_channel": "Reaching them via their preferred conversational channel maximizes CTR.",
-                    "why_promotion": f"The promotion {first_promo_code or 'none'} matches their affinity profile and fits margin targets."
+                    "why_audience": "This cohort was selected based on purchase Recency (R) showing moderate inactivity, combined with strong customer lifetime spend (Monetary value) and high historical order Frequency (F). Shoppers outside this cohort were excluded due to active purchase recency or low category affinity rankings.",
+                    "why_now": "Outreach is recommended at this moment because their inactivity duration indicates they are approaching a critical threshold where Churn Probability begins to elevate.",
+                    "why_channel": "WhatsApp is recommended as the primary channel because preferred channel metrics show it has the highest customer engagement rate compared to alternative channels.",
+                    "why_promotion": f"The promotion code {first_promo_code or 'SAVE10'} was selected from all available promotions because it matches their historical Shopper Affinity for this category and provides an optimal incentive without diluting margins, whereas other coupons were either category-mismatched or had excessive discount value."
                 },
                 "whatsapp_template": f"Hey {{name}}! 👋 We noticed you haven't visited us in a while, so we have a special treat for you! Use code *{first_promo_code or 'SAVE10'}* to get exclusive discounts on your next order. 🛍️ Shop now!",
                 "whatsapp_variants": [

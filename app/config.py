@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     crm_webhook_url: str = "http://localhost:8000/api/webhook/delivery"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000,https://xenia-crm-frontend.vercel.app"
 
     @property
     def origins_list(self) -> list[str]:

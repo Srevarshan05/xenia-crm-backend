@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any
 from uuid import UUID
 import logging
+import csv
+import io
+import uuid
+from datetime import datetime
 
 from app.database import get_db
 from app.models.customer import Customer, CustomerMetrics, CustomerInsights, CustomerSegment
@@ -314,4 +319,202 @@ def get_customer_story(customer_id: UUID, db: Session = Depends(get_db)):
             "action": next_step_action
         }
     }
+
+
+@router.post("/import", response_model=Dict[str, Any])
+def import_shoppers_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    POST /api/customers/import
+    Imports shoppers from a CSV file. Performs validation, skips duplicates,
+    and saves to PostgreSQL.
+    """
+    try:
+        content = file.file.read().decode("utf-8-sig")
+        f = io.StringIO(content)
+        reader = csv.DictReader(f)
+    except Exception as e:
+        logger.error(f"Failed to read/parse uploaded CSV: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    # Expected columns: customer_id, name, email, phone, city, segment, last_purchase_date, total_spend
+    for row_idx, row in enumerate(reader, start=1):
+        name = (row.get("name") or "").strip()
+        email = (row.get("email") or "").strip()
+
+        if not name:
+            errors.append(f"Row {row_idx}: Name is required")
+            skipped += 1
+            continue
+        if not email or "@" not in email:
+            errors.append(f"Row {row_idx}: Valid email is required")
+            skipped += 1
+            continue
+
+        # Check unique email constraint
+        existing = db.query(Customer).filter(Customer.email == email).first()
+        if existing:
+            errors.append(f"Row {row_idx}: Email '{email}' already exists in database")
+            skipped += 1
+            continue
+
+        cust_id = (row.get("customer_id") or "").strip()
+        customer_uuid = None
+        if cust_id:
+            try:
+                customer_uuid = uuid.UUID(cust_id)
+            except ValueError:
+                errors.append(f"Row {row_idx}: Invalid customer_id UUID format")
+                skipped += 1
+                continue
+        else:
+            customer_uuid = uuid.uuid4()
+
+        # Check unique customer_id constraint
+        existing_id = db.query(Customer).filter(Customer.customer_id == customer_uuid).first()
+        if existing_id:
+            errors.append(f"Row {row_idx}: Customer ID '{customer_uuid}' already exists in database")
+            skipped += 1
+            continue
+
+        phone = (row.get("phone") or "").strip() or None
+        city = (row.get("city") or "").strip() or None
+
+        # Create customer
+        try:
+            new_cust = Customer(
+                customer_id=customer_uuid,
+                name=name,
+                email=email,
+                phone=phone,
+                city=city,
+                join_date=datetime.now()
+            )
+            db.add(new_cust)
+
+            # Assign segment if provided
+            segment = (row.get("segment") or "").strip()
+            if segment:
+                # Add segment row
+                new_seg = CustomerSegment(
+                    customer_id=customer_uuid,
+                    segment_name=segment,
+                    assigned_at=datetime.now()
+                )
+                db.add(new_seg)
+
+            # Handle metrics: total_spend, last_purchase_date
+            total_spend_str = (row.get("total_spend") or "").strip()
+            last_purchase_date_str = (row.get("last_purchase_date") or "").strip()
+
+            total_spend = None
+            if total_spend_str:
+                try:
+                    total_spend = float(total_spend_str)
+                    if total_spend < 0:
+                        raise ValueError()
+                except ValueError:
+                    errors.append(f"Row {row_idx}: Invalid total_spend (must be positive number)")
+                    db.rollback()
+                    skipped += 1
+                    continue
+
+            days_since_last_order = None
+            if last_purchase_date_str:
+                date_formats = ["%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"]
+                parsed_date = None
+                for df in date_formats:
+                    try:
+                        parsed_date = datetime.strptime(last_purchase_date_str, df)
+                        break
+                    except ValueError:
+                        continue
+
+                if parsed_date:
+                    days_since_last_order = (datetime.now() - parsed_date).days
+                else:
+                    errors.append(f"Row {row_idx}: Invalid last_purchase_date format (use YYYY-MM-DD)")
+                    db.rollback()
+                    skipped += 1
+                    continue
+
+            if total_spend is not None or days_since_last_order is not None:
+                # Compute scores
+                r_score = 3
+                if days_since_last_order is not None:
+                    if days_since_last_order < 30: r_score = 5
+                    elif days_since_last_order < 90: r_score = 4
+                    elif days_since_last_order < 180: r_score = 3
+                    elif days_since_last_order < 365: r_score = 2
+                    else: r_score = 1
+
+                m_score = 3
+                if total_spend is not None:
+                    if total_spend > 50000: m_score = 5
+                    elif total_spend > 25000: m_score = 4
+                    elif total_spend > 10000: m_score = 3
+                    elif total_spend > 2000: m_score = 2
+                    else: m_score = 1
+
+                value_score = 0.0
+                if total_spend is not None:
+                    value_score = min(100.0, (total_spend / 1000.0))
+
+                churn_prob = 0.15
+                if days_since_last_order is not None:
+                    churn_prob = min(0.99, max(0.01, days_since_last_order / 365.0))
+
+                new_metrics = CustomerMetrics(
+                    customer_id=customer_uuid,
+                    r_score=r_score,
+                    f_score=3,
+                    m_score=m_score,
+                    value_score=value_score,
+                    churn_score=churn_prob * 100,
+                    churn_probability=churn_prob,
+                    engagement_score=50.0,
+                    preferred_channel="WhatsApp",
+                    total_spend=total_spend,
+                    total_orders=1 if total_spend and total_spend > 0 else 0,
+                    days_since_last_order=days_since_last_order,
+                    last_updated=datetime.now()
+                )
+                db.add(new_metrics)
+
+            db.commit()
+            imported += 1
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error importing row {row_idx}: {e}")
+            errors.append(f"Row {row_idx}: Database error: {str(e)}")
+            skipped += 1
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors
+    }
+
+
+@router.get("/sample-csv")
+def download_sample_csv():
+    """
+    GET /api/customers/sample-csv
+    Downloads a sample CSV template for shoppers.
+    """
+    csv_content = (
+        "customer_id,name,email,phone,city,segment,last_purchase_date,total_spend\n"
+        "e1b4b9fb-16d1-4db5-b8a5-d8f99b240101,John Doe,john.doe@example.com,+919876543210,Chennai,Champion,2026-05-10,45000\n"
+        "e2b4b9fb-16d1-4db5-b8a5-d8f99b240102,Jane Smith,jane.smith@example.com,+918765432109,Mumbai,Lost Champion,2026-02-15,62000\n"
+        ",Bob Johnson,bob.johnson@example.com,+917654321098,Bengaluru,At-Risk,2025-11-20,12000\n"
+    )
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=sample_shoppers.csv"}
+    )
+
 

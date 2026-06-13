@@ -152,6 +152,8 @@ def make_audience_summary(all_matching, suppressed_ids, eligible_customers) -> A
     sample = eligible_customers[:500]
     avg_spend = sum(c.metrics.total_spend or 0.0 for c in sample) / len(sample) if sample else 0.0
     avg_inactivity = int(sum(c.metrics.days_since_last_order or 0 for c in sample) / len(sample)) if sample else 0
+    avg_churn = sum(c.metrics.churn_probability or 0.0 for c in sample) / len(sample) if sample else 0.0
+    avg_total_orders = sum(c.metrics.total_orders or 0 for c in sample) / len(sample) if sample else 0.0
     
     # City distribution
     city_dist = {}
@@ -183,7 +185,9 @@ def make_audience_summary(all_matching, suppressed_ids, eligible_customers) -> A
         avg_inactivity_days=avg_inactivity,
         city_distribution=city_dist,
         channel_distribution=channel_dist,
-        category_affinity_distribution=category_affinities
+        category_affinity_distribution=category_affinities,
+        avg_churn_probability=float(round(avg_churn, 4)),
+        avg_total_orders=float(round(avg_total_orders, 1))
     )
 
 @router.get("/prepare-context", response_model=PrepareContextResponse)
@@ -393,6 +397,8 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
             "size": eligible,
             "avg_spend": audience_summary_data.avg_spend,
             "avg_inactivity_days": audience_summary_data.avg_inactivity_days,
+            "avg_churn_probability": audience_summary_data.avg_churn_probability,
+            "avg_total_orders": audience_summary_data.avg_total_orders,
             "category_affinity_distribution": audience_summary_data.category_affinity_distribution,
             "city_distribution": audience_summary_data.city_distribution,
             "channel_distribution": audience_summary_data.channel_distribution
@@ -419,6 +425,21 @@ def generate_campaign_from_goal(payload: GoalPlannerRequest, db: Session = Depen
         selected_promo.times_recommended += 1
         db.commit()
         
+    # Enrich strategy with audience metrics and parsed filters for frontend explainability
+    strategy["audience_summary"] = {
+        "total_identified": audience_summary_data.total_identified,
+        "suppressed": audience_summary_data.suppressed,
+        "eligible": audience_summary_data.eligible,
+        "avg_spend": float(audience_summary_data.avg_spend),
+        "avg_inactivity_days": int(audience_summary_data.avg_inactivity_days),
+        "avg_churn_probability": float(audience_summary_data.avg_churn_probability),
+        "avg_total_orders": float(audience_summary_data.avg_total_orders),
+        "city_distribution": audience_summary_data.city_distribution,
+        "channel_distribution": audience_summary_data.channel_distribution,
+        "category_affinity_distribution": audience_summary_data.category_affinity_distribution
+    }
+    strategy["parsed_filters"] = filters
+
     # 6. Create Draft Campaign record
     new_campaign = Campaign(
         name=strategy.get("campaign_name", f"Campaign for Goal: {goal[:30]}"),

@@ -9,6 +9,7 @@ Campaign Dispatch Flow:
 """
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
@@ -16,6 +17,10 @@ import uuid
 from uuid import UUID
 import logging
 from datetime import datetime, timezone
+import io
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 
 from app.database import get_db
 from app.models.campaign import Campaign, CampaignSimulation, CampaignMetrics, Communication
@@ -35,7 +40,7 @@ def list_campaigns(status: str = None, db: Session = Depends(get_db)):
     GET /api/campaigns
     List all campaigns with optional status filter.
     """
-    query = db.query(Campaign)
+    query = db.query(Campaign).filter(~Campaign.channel.in_(["Voice", "Voice Call"]))
     if status:
         query = query.filter(Campaign.status == status)
     return query.order_by(Campaign.created_at.desc()).all()
@@ -388,3 +393,289 @@ def get_campaign_recipients(
         "limit": limit,
         "pages": (total_count + limit - 1) // limit
     }
+
+
+def generate_executive_summary(campaign, metrics):
+    if not metrics:
+        return "This campaign has not been launched yet. No performance metrics are available to summarize the outcome."
+    
+    purchases = metrics.total_purchased or 0
+    revenue = float(metrics.attributed_revenue or 0)
+    cost = float(metrics.estimated_cost or 0)
+    roi = float(metrics.roi or 0)
+    conv_rate = float(metrics.conversion_rate or 0) * 100
+    sent = metrics.total_sent or 1
+    opened = metrics.total_opened or 0
+    clicked = metrics.total_clicked or 0
+    
+    promo_code = campaign.promotion.promo_code if campaign.promotion else "None"
+    channel = campaign.channel
+    segment = campaign.target_segment or "selected segment"
+    
+    summary = (
+        f"The campaign '{campaign.name}' was launched targeting {sent} customers in the '{segment}' segment via {channel}. "
+        f"The campaign featured the '{promo_code}' promotion. "
+    )
+    
+    if purchases > 0:
+        summary += (
+            f"The initiative successfully generated a total of INR {revenue:,.2f} in attributed revenue from {purchases} completed purchases. "
+            f"With a campaign dispatch cost of INR {cost:,.2f}, the campaign achieved a conversion rate of {conv_rate:.1f}% and a return on investment (ROI) of {roi:.1f}%. "
+        )
+    else:
+        summary += (
+            f"No purchases have been attributed to this campaign yet. "
+        )
+        
+    if sent > 0:
+        delivered_pct = (metrics.total_delivered or 0) / sent * 100
+        opened_pct = opened / sent * 100
+        clicked_pct = clicked / sent * 100
+        summary += (
+            f"In terms of engagement, the campaign recorded a delivery rate of {delivered_pct:.1f}%, an open rate of {opened_pct:.1f}%, and a click-through rate of {clicked_pct:.1f}%."
+        )
+        
+    return summary
+
+
+def build_pdf_report(campaign, metrics, filename_or_stream):
+    c = canvas.Canvas(filename_or_stream, pagesize=letter)
+    width, height = letter # 612 x 792
+    
+    # Colors
+    primary_color = colors.HexColor("#0f172a") # Navy Dark Slate
+    accent_color = colors.HexColor("#7c3aed") # Purple
+    text_color = colors.HexColor("#334155") # Gray
+    light_bg = colors.HexColor("#f8fafc") # Slate Light
+    border_color = colors.HexColor("#e2e8f0") # Border gray
+    
+    # Draw header banner
+    c.setFillColor(primary_color)
+    c.rect(0, 720, 612, 72, fill=True, stroke=False)
+    
+    # Header Title
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(36, 750, "XENIA CRM — CAMPAIGN PERFORMANCE REPORT")
+    c.setFont("Helvetica", 9)
+    c.drawString(36, 735, "PREMIUM ANALYTICS LOG & BUSINESS OUTCOME SUMMARY")
+    
+    # Date generated
+    c.drawRightString(576, 745, f"Date: {datetime.now().strftime('%b %d, %Y')}")
+    
+    # Section 1: Campaign Metadata
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 685, "CAMPAIGN INFORMATION")
+    c.setStrokeColor(border_color)
+    c.setLineWidth(1)
+    c.line(36, 678, 576, 678)
+    
+    # Left Column
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 655, "Campaign Name:")
+    c.drawString(36, 635, "Objective:")
+    c.drawString(36, 600, "Target Segment:")
+    c.drawString(36, 580, "Outreach Channel:")
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(140, 655, campaign.name or "N/A")
+    obj_text = campaign.objective or "N/A"
+    if len(obj_text) > 80:
+        c.drawString(140, 635, obj_text[:80] + "...")
+    else:
+        c.drawString(140, 635, obj_text)
+    c.drawString(140, 600, campaign.target_segment or "General")
+    c.drawString(140, 580, campaign.channel or "N/A")
+    
+    # Right Column
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(340, 655, "Campaign ID:")
+    c.drawString(340, 635, "Launch Date:")
+    c.drawString(340, 600, "Audience Size:")
+    c.drawString(340, 580, "Campaign Status:")
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(440, 655, str(campaign.campaign_id)[:18] + "...")
+    launch_str = campaign.launched_at.strftime('%Y-%m-%d %H:%M') if campaign.launched_at else "N/A"
+    c.drawString(440, 635, launch_str)
+    c.drawString(440, 600, str(campaign.target_audience_size or 0))
+    status_str = (campaign.status or "N/A").upper()
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(accent_color if campaign.status in ["launched", "completed"] else text_color)
+    c.drawString(440, 580, status_str)
+    
+    # Section 2: Performance metrics
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 545, "PERFORMANCE SUMMARY")
+    c.line(36, 538, 576, 538)
+    
+    # Draw simple metrics table
+    c.setFillColor(light_bg)
+    c.rect(36, 435, 540, 90, fill=True, stroke=True)
+    c.setStrokeColor(border_color)
+    
+    # Draw vertical grid lines
+    c.line(126, 435, 126, 525)
+    c.line(216, 435, 216, 525)
+    c.line(306, 435, 306, 525)
+    c.line(396, 435, 396, 525)
+    c.line(486, 435, 486, 525)
+    
+    # Header row
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(81, 510, "SENT")
+    c.drawCentredString(171, 510, "DELIVERED")
+    c.drawCentredString(261, 510, "OPENED")
+    c.drawCentredString(351, 510, "CLICKED")
+    c.drawCentredString(441, 510, "PROMO APPL.")
+    c.drawCentredString(531, 510, "PURCHASED")
+    
+    # Values row
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(text_color)
+    sent_val = metrics.total_sent if metrics else 0
+    deliv_val = metrics.total_delivered if metrics else 0
+    open_val = metrics.total_opened if metrics else 0
+    click_val = metrics.total_clicked if metrics else 0
+    promo_val = metrics.total_promo_applied if metrics else 0
+    purch_val = metrics.total_purchased if metrics else 0
+    
+    c.drawCentredString(81, 470, str(sent_val))
+    c.drawCentredString(171, 470, str(deliv_val))
+    c.drawCentredString(261, 470, str(open_val))
+    c.drawCentredString(351, 470, str(click_val))
+    c.drawCentredString(441, 470, str(promo_val))
+    c.drawCentredString(531, 470, str(purch_val))
+    
+    # Percentages row
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#64748b"))
+    c.drawCentredString(81, 450, "100.0%")
+    c.drawCentredString(171, 450, f"{(deliv_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(261, 450, f"{(open_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(351, 450, f"{(click_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(441, 450, f"{(promo_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(531, 450, f"{(purch_val/max(1, sent_val)*100):.1f}%")
+    
+    # Section 3: Revenue Metrics & ROI
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 400, "REVENUE METRICS")
+    c.line(36, 393, 576, 393)
+    
+    revenue_val = float(metrics.attributed_revenue or 0) if metrics else 0.0
+    cost_val = float(metrics.estimated_cost or 0) if metrics else 0.0
+    conversion_rate = float(metrics.conversion_rate or 0) * 100 if metrics else 0.0
+    roi = float(metrics.roi or 0) if metrics else 0.0
+    
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 370, "Revenue Generated:")
+    c.drawString(36, 350, "Campaign Dispatch Cost:")
+    c.drawString(36, 330, "Conversion Rate:")
+    c.drawString(36, 310, "Estimated Return on Investment (ROI):")
+    
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(240, 370, f"INR {revenue_val:,.2f}")
+    c.drawString(240, 350, f"INR {cost_val:,.2f}")
+    c.drawString(240, 330, f"{conversion_rate:.2f}%")
+    c.setFillColor(colors.HexColor("#16a34a") if roi >= 0 else colors.HexColor("#dc2626"))
+    c.drawString(240, 310, f"{roi:.2f}%")
+    
+    # Section 4: Promotion Information
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 275, "PROMOTION INFORMATION")
+    c.line(36, 268, 576, 268)
+    
+    promo_name = "None"
+    promo_code = "None"
+    promo_usage = 0
+    if campaign.promotion:
+        promo_name = campaign.promotion.name
+        promo_code = campaign.promotion.promo_code
+        promo_usage = promo_val
+        
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 245, "Promotion Used:")
+    c.drawString(36, 225, "Promo Code:")
+    c.drawString(36, 205, "Promo Usage / Claim Count:")
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(200, 245, promo_name)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(200, 225, promo_code)
+    c.setFont("Helvetica", 9)
+    c.drawString(200, 205, str(promo_usage))
+    
+    # Section 5: Executive Summary
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 170, "EXECUTIVE SUMMARY")
+    c.line(36, 163, 576, 163)
+    
+    summary_text = generate_executive_summary(campaign, metrics)
+    c.setFillColor(light_bg)
+    c.rect(36, 60, 540, 85, fill=True, stroke=True)
+    
+    c.setFillColor(text_color)
+    c.setFont("Helvetica", 9)
+    # Wrap text inside the box
+    lines = []
+    words = summary_text.split(" ")
+    curr_line = ""
+    for w in words:
+        if len(curr_line + " " + w) > 95:
+            lines.append(curr_line)
+            curr_line = w
+        else:
+            curr_line = (curr_line + " " + w).strip()
+    if curr_line:
+        lines.append(curr_line)
+        
+    y_pos = 130
+    for line in lines[:5]:
+        c.drawString(46, y_pos, line)
+        y_pos -= 14
+        
+    # Footer
+    c.setStrokeColor(border_color)
+    c.line(36, 40, 576, 40)
+    c.setFillColor(colors.HexColor("#94a3b8"))
+    c.setFont("Helvetica", 8)
+    c.drawString(36, 26, "Xenia CRM Platform © 2026. Generated Automatically.")
+    c.drawRightString(576, 26, "Page 1 of 1")
+    
+    c.showPage()
+    c.save()
+
+
+@router.get("/{campaign_id}/report")
+def export_campaign_report(campaign_id: UUID, db: Session = Depends(get_db)):
+    """
+    GET /api/campaigns/{campaign_id}/report
+    Generates and downloads a premium PDF performance report for a campaign.
+    """
+    campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    metrics = campaign.metrics
+    
+    buffer = io.BytesIO()
+    build_pdf_report(campaign, metrics, buffer)
+    buffer.seek(0)
+    
+    sanitized_name = "".join(x for x in campaign.name if x.isalnum() or x in " -_").strip()
+    filename = f"campaign_report_{sanitized_name or 'export'}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

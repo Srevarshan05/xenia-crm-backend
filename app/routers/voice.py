@@ -11,12 +11,14 @@ import logging
 import base64
 import random
 import uuid
+from uuid import UUID
+import io
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -24,6 +26,11 @@ from sqlalchemy import text
 from app.database import get_db
 from app.services.xenia_ai import XeniaAIService
 from app.config import settings
+from app.models.campaign import Campaign, CampaignMetrics, CampaignSimulation
+from app.models.promotion import Promotion
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 
 logger = logging.getLogger("xenia.voice")
 router = APIRouter(prefix="/api/voice", tags=["Voice Campaigns"])
@@ -825,4 +832,416 @@ def simulate_voice_calls(payload: dict):
         estimated_roi=roi,
         estimated_cost_inr=estimated_cost,
         shopper_events=events
+    )
+
+
+class VoiceCampaignSaveRequest(BaseModel):
+    name: str
+    objective: str
+    target_segment: str
+    target_audience_size: int
+    voice_tone: str
+    voice_model_name: str
+    promo_code: Optional[str] = None
+    script_text: str
+    sim_data: dict
+
+
+@router.post("/campaigns", response_model=dict)
+def save_voice_campaign(payload: VoiceCampaignSaveRequest, db: Session = Depends(get_db)):
+    """
+    POST /api/voice/campaigns
+    Saves a completed Voice campaign to the PostgreSQL database.
+    """
+    try:
+        # Find promotion if code is provided
+        promotion_id = None
+        if payload.promo_code:
+            promo = db.query(Promotion).filter(Promotion.promo_code == payload.promo_code).first()
+            if promo:
+                promotion_id = promo.promotion_id
+                
+        # Create Campaign
+        campaign = Campaign(
+            name=payload.name,
+            objective=payload.objective,
+            promotion_id=promotion_id,
+            channel="Voice Call",
+            status="completed",
+            message_template=payload.script_text,
+            target_segment=payload.target_segment,
+            target_audience_size=payload.target_audience_size,
+            launched_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc)
+        )
+        db.add(campaign)
+        db.flush() # get campaign ID
+        
+        # Save metrics
+        sim = payload.sim_data
+        metrics = CampaignMetrics(
+            campaign_id=campaign.campaign_id,
+            total_sent=sim.get("total_calls_initiated", 0),
+            total_delivered=sim.get("calls_answered", 0),
+            total_opened=sim.get("calls_completed", 0),
+            total_clicked=sim.get("interested_customers", 0),
+            total_promo_applied=sim.get("promo_sent", 0),
+            total_purchased=sim.get("attributed_purchases", 0),
+            attributed_revenue=sim.get("total_revenue_generated", 0.0),
+            estimated_cost=sim.get("estimated_cost_inr", 0.0),
+            roi=sim.get("estimated_roi", 0.0) * 100, # ROI is percentage
+            conversion_rate=sim.get("attributed_purchases", 0) / max(1, sim.get("total_calls_initiated", 1))
+        )
+        db.add(metrics)
+        
+        # Save voice-specific info inside CampaignSimulation simulation_context
+        # E.g. voice_model, voice_tone, and full shopper_events list
+        sim_context = {
+            "voice_model": payload.voice_model_name,
+            "voice_tone": payload.voice_tone,
+            "shopper_events": sim.get("shopper_events", [])
+        }
+        
+        simulation = CampaignSimulation(
+            campaign_id=campaign.campaign_id,
+            predicted_reach=payload.target_audience_size,
+            predicted_ctr=sim.get("calls_completed", 0) / max(1, sim.get("total_calls_initiated", 1)),
+            predicted_cvr=sim.get("attributed_purchases", 0) / max(1, sim.get("total_calls_initiated", 1)),
+            predicted_revenue=sim.get("total_revenue_generated", 0.0),
+            confidence_score=0.95,
+            simulation_context=sim_context,
+            why_channel=payload.voice_model_name,
+            why_promotion=payload.promo_code or "None",
+            why_audience=payload.target_segment,
+            ai_narrative=payload.voice_tone
+        )
+        db.add(simulation)
+        
+        db.commit()
+        return {"campaign_id": str(campaign.campaign_id), "status": "success"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to save voice campaign: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save voice campaign: {str(e)}")
+
+
+@router.get("/history", response_model=List[dict])
+def get_voice_campaigns_history(db: Session = Depends(get_db)):
+    """
+    GET /api/voice/history
+    List all completed voice campaigns.
+    """
+    campaigns = db.query(Campaign).filter(
+        Campaign.channel == "Voice Call",
+        Campaign.status == "completed"
+    ).order_by(Campaign.created_at.desc()).all()
+    
+    res = []
+    for c in campaigns:
+        metrics_dict = {}
+        if c.metrics:
+            metrics_dict = {
+                "total_sent": c.metrics.total_sent,
+                "total_delivered": c.metrics.total_delivered,
+                "total_opened": c.metrics.total_opened,
+                "total_clicked": c.metrics.total_clicked,
+                "total_promo_applied": c.metrics.total_promo_applied,
+                "total_purchased": c.metrics.total_purchased,
+                "attributed_revenue": float(c.metrics.attributed_revenue),
+                "estimated_cost": float(c.metrics.estimated_cost),
+                "roi": c.metrics.roi,
+                "conversion_rate": c.metrics.conversion_rate
+            }
+            
+        sim_context = {}
+        if c.simulation and c.simulation.simulation_context:
+            sim_context = c.simulation.simulation_context
+            
+        res.append({
+            "campaign_id": str(c.campaign_id),
+            "name": c.name,
+            "objective": c.objective,
+            "target_segment": c.target_segment,
+            "target_audience_size": c.target_audience_size,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "completed_at": c.completed_at.isoformat() if c.completed_at else None,
+            "message_template": c.message_template,
+            "promotion_code": c.promotion.promo_code if c.promotion else None,
+            "voice_model_name": c.simulation.why_channel if c.simulation else "Custom Voice",
+            "voice_tone": c.simulation.ai_narrative if c.simulation else "Professional",
+            "metrics": metrics_dict,
+            "simulation_context": sim_context
+        })
+    return res
+
+
+def generate_voice_executive_summary(campaign, metrics, sim_context):
+    if not metrics:
+        return "This voice campaign has not been launched yet. No performance metrics are available to summarize."
+    
+    sent = metrics.total_sent or 0
+    answered = metrics.total_delivered or 0
+    completed = metrics.total_opened or 0
+    interested = metrics.total_clicked or 0
+    purchases = metrics.total_purchased or 0
+    revenue = float(metrics.attributed_revenue or 0)
+    cost = float(metrics.estimated_cost or 0)
+    roi = float(metrics.roi or 0)
+    
+    voice_model = sim_context.get("voice_model", "Xenia Voice")
+    voice_tone = sim_context.get("voice_tone", "Professional")
+    promo_code = campaign.promotion.promo_code if campaign.promotion else "None"
+    
+    summary = (
+        f"Outbound AI Voice campaign '{campaign.name}' was executed targeting {sent} Champion and Lost Champion shoppers. "
+        f"Calls were synthesized using the ElevenLabs '{voice_model}' profile with a {voice_tone.lower()} tone. "
+    )
+    
+    if answered > 0:
+        answer_pct = answered / max(1, sent) * 100
+        interest_pct = interested / max(1, completed) * 100
+        summary += (
+            f"The outbound dialer successfully connected with {answered} shoppers ({answer_pct:.1f}% answer rate), with {completed} calls completing full audio play. "
+            f"Following the voice pitch, {interested} customers showed purchase interest and were sent SMS promotions containing '{promo_code}' ({interest_pct:.1f}% positive response rate). "
+        )
+    else:
+        summary += "No calls were successfully answered during the simulation."
+        
+    if purchases > 0:
+        summary += (
+            f"This campaign successfully generated INR {revenue:,.2f} in attributed revenue from {purchases} conversions. "
+            f"Against a voice synthesis cost of INR {cost:,.2f}, the campaign returned a healthy ROI of {roi:.1f}%."
+        )
+    
+    return summary
+
+
+def build_voice_pdf_report(campaign, metrics, simulation, filename_or_stream):
+    c = canvas.Canvas(filename_or_stream, pagesize=letter)
+    width, height = letter # 612 x 792
+    
+    primary_color = colors.HexColor("#0f172a") # Navy Dark Slate
+    accent_color = colors.HexColor("#7c3aed") # Purple
+    text_color = colors.HexColor("#334155") # Gray
+    light_bg = colors.HexColor("#f8fafc") # Slate Light
+    border_color = colors.HexColor("#e2e8f0") # Border gray
+    
+    # Header banner
+    c.setFillColor(primary_color)
+    c.rect(0, 720, 612, 72, fill=True, stroke=False)
+    
+    # Header Title
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(36, 750, "XENIA CRM — VOICE OUTBOUND PERFORMANCE REPORT")
+    c.setFont("Helvetica", 9)
+    c.drawString(36, 735, "OUTBOUND AI DIALER LOG & ELEVENLABS AUDIO SUMMARY")
+    c.drawRightString(576, 745, f"Date: {datetime.now().strftime('%b %d, %Y')}")
+    
+    # Section 1: Campaign Metadata
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 685, "CAMPAIGN OVERVIEW")
+    c.setStrokeColor(border_color)
+    c.setLineWidth(1)
+    c.line(36, 678, 576, 678)
+    
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 655, "Campaign Name:")
+    c.drawString(36, 635, "Goal/Objective:")
+    c.drawString(36, 600, "Audience Cohort:")
+    c.drawString(36, 580, "Outbound Script:")
+    
+    c.setFont("Helvetica", 9)
+    c.drawString(140, 655, campaign.name or "N/A")
+    obj_text = campaign.objective or "N/A"
+    if len(obj_text) > 80:
+        c.drawString(140, 635, obj_text[:80] + "...")
+    else:
+        c.drawString(140, 635, obj_text)
+    c.drawString(140, 600, campaign.target_segment or "VIP Segment")
+    script_snippet = campaign.message_template or "N/A"
+    if len(script_snippet) > 85:
+        c.drawString(140, 580, f'"{script_snippet[:85]}..."')
+    else:
+        c.drawString(140, 580, f'"{script_snippet}"')
+        
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(340, 655, "ElevenLabs Voice:")
+    c.drawString(340, 635, "Voice Tone Guidance:")
+    c.drawString(340, 600, "Total Targets:")
+    c.drawString(340, 580, "Campaign Status:")
+    
+    c.setFont("Helvetica", 9)
+    sim_context = simulation.simulation_context if simulation else {}
+    voice_model = sim_context.get("voice_model", "Xenia Signature Voice")
+    voice_tone = sim_context.get("voice_tone", "Professional")
+    c.drawString(440, 655, voice_model)
+    c.drawString(440, 635, voice_tone)
+    c.drawString(440, 600, str(campaign.target_audience_size or 0))
+    status_str = (campaign.status or "completed").upper()
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(accent_color)
+    c.drawString(440, 580, status_str)
+    
+    # Section 2: Outbound Call Funnel Metrics
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 545, "CALL ENGAGEMENT FUNNEL")
+    c.line(36, 538, 576, 538)
+    
+    c.setFillColor(light_bg)
+    c.rect(36, 435, 540, 90, fill=True, stroke=True)
+    c.setStrokeColor(border_color)
+    
+    c.line(126, 435, 126, 525)
+    c.line(216, 435, 216, 525)
+    c.line(306, 435, 306, 525)
+    c.line(396, 435, 396, 525)
+    c.line(486, 435, 486, 525)
+    
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(81, 510, "DIALED")
+    c.drawCentredString(171, 510, "ANSWERED")
+    c.drawCentredString(261, 510, "COMPLETED")
+    c.drawCentredString(351, 510, "INTERESTED")
+    c.drawCentredString(441, 510, "SMS SENT")
+    c.drawCentredString(531, 510, "PURCHASES")
+    
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(text_color)
+    sent_val = metrics.total_sent if metrics else 0
+    deliv_val = metrics.total_delivered if metrics else 0
+    open_val = metrics.total_opened if metrics else 0
+    click_val = metrics.total_clicked if metrics else 0
+    promo_val = metrics.total_promo_applied if metrics else 0
+    purch_val = metrics.total_purchased if metrics else 0
+    
+    c.drawCentredString(81, 470, str(sent_val))
+    c.drawCentredString(171, 470, str(deliv_val))
+    c.drawCentredString(261, 470, str(open_val))
+    c.drawCentredString(351, 470, str(click_val))
+    c.drawCentredString(441, 470, str(promo_val))
+    c.drawCentredString(531, 470, str(purch_val))
+    
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#64748b"))
+    c.drawCentredString(81, 450, "100.0%")
+    c.drawCentredString(171, 450, f"{(deliv_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(261, 450, f"{(open_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(351, 450, f"{(click_val/max(1, open_val)*100):.1f}%")
+    c.drawCentredString(441, 450, f"{(promo_val/max(1, sent_val)*100):.1f}%")
+    c.drawCentredString(531, 450, f"{(purch_val/max(1, sent_val)*100):.1f}%")
+    
+    # Section 3: Financial Performance
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 400, "REVENUE & VOICE SYNTHESIS ROI")
+    c.line(36, 393, 576, 393)
+    
+    revenue_val = float(metrics.attributed_revenue or 0) if metrics else 0.0
+    cost_val = float(metrics.estimated_cost or 0) if metrics else 0.0
+    roi = float(metrics.roi or 0) if metrics else 0.0
+    
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 370, "Total Attributed Revenue:")
+    c.drawString(36, 350, "Voice Synthesis & Telecom Cost:")
+    c.drawString(36, 330, "Call Conversion Rate:")
+    c.drawString(36, 310, "Voice Campaign ROI:")
+    
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(240, 370, f"INR {revenue_val:,.2f}")
+    c.drawString(240, 350, f"INR {cost_val:,.2f}")
+    conv_rate = purch_val / max(1, sent_val) * 100
+    c.drawString(240, 330, f"{conv_rate:.2f}%")
+    c.setFillColor(colors.HexColor("#16a34a") if roi >= 0 else colors.HexColor("#dc2626"))
+    c.drawString(240, 310, f"{roi:.2f}%")
+    
+    # Section 4: Promotion Claim & Incentive Details
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 275, "INCENTIVE CAMPAIGN DETAILED LOG")
+    c.line(36, 268, 576, 268)
+    
+    promo_code = campaign.promotion.promo_code if campaign.promotion else "None"
+    c.setFillColor(text_color)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(36, 245, "Promo Code Dispatched:")
+    c.drawString(36, 225, "SMS Offers Dispatched:")
+    c.drawString(36, 205, "Promo Redemption Count:")
+    
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(200, 245, promo_code)
+    c.setFont("Helvetica", 9)
+    c.drawString(200, 225, str(promo_val))
+    c.drawString(200, 205, str(purch_val))
+    
+    # Section 5: Plain-English Executive Summary
+    c.setFillColor(primary_color)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(36, 170, "EXECUTIVE OUTCOME SUMMARY")
+    c.line(36, 163, 576, 163)
+    
+    summary_text = generate_voice_executive_summary(campaign, metrics, sim_context)
+    c.setFillColor(light_bg)
+    c.rect(36, 60, 540, 85, fill=True, stroke=True)
+    
+    c.setFillColor(text_color)
+    c.setFont("Helvetica", 9)
+    lines = []
+    words = summary_text.split(" ")
+    curr_line = ""
+    for w in words:
+        if len(curr_line + " " + w) > 95:
+            lines.append(curr_line)
+            curr_line = w
+        else:
+            curr_line = (curr_line + " " + w).strip()
+    if curr_line:
+        lines.append(curr_line)
+        
+    y_pos = 130
+    for line in lines[:5]:
+        c.drawString(46, y_pos, line)
+        y_pos -= 14
+        
+    # Footer
+    c.setStrokeColor(border_color)
+    c.line(36, 40, 576, 40)
+    c.setFillColor(colors.HexColor("#94a3b8"))
+    c.setFont("Helvetica", 8)
+    c.drawString(36, 26, "Xenia CRM Platform © 2026. Generated Automatically.")
+    c.drawRightString(576, 26, "Page 1 of 1")
+    
+    c.showPage()
+    c.save()
+
+
+@router.get("/campaigns/{campaign_id}/report")
+def export_voice_report(campaign_id: UUID, db: Session = Depends(get_db)):
+    """
+    GET /api/voice/campaigns/{campaign_id}/report
+    Generates and downloads a premium PDF performance report for a voice campaign.
+    """
+    campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    metrics = campaign.metrics
+    simulation = campaign.simulation
+    
+    buffer = io.BytesIO()
+    build_voice_pdf_report(campaign, metrics, simulation, buffer)
+    buffer.seek(0)
+    
+    sanitized_name = "".join(x for x in campaign.name if x.isalnum() or x in " -_").strip()
+    filename = f"voice_campaign_report_{sanitized_name or 'export'}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

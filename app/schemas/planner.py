@@ -58,6 +58,8 @@ class AudienceSummary(BaseModel):
     city_distribution: Dict[str, int]
     channel_distribution: Dict[str, int]
     category_affinity_distribution: Dict[str, float]
+    avg_churn_probability: Optional[float] = 0.0
+    avg_total_orders: Optional[float] = 0.0
 
 
 class ShopperPreview(BaseModel):

@@ -81,9 +81,12 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(potential_rev, 2))),
                 "priority": "high",
                 "ai_explanation": (
-                    f"Identified {len(reactivate_ids)} high-value customers with slipping recency. "
-                    "These customers have high historical spend but have not purchased recently. "
-                    "Proactive outreach is recommended to restore their shopping frequency."
+                    f"This group of {len(reactivate_ids)} shoppers was chosen based on a purchase Recency (R) "
+                    "inactivity window of up to 180 days, high lifetime spend (Monetary value M), "
+                    "and elevated Churn Probability (exceeding 65%). Active customers with low churn risk "
+                    "were excluded. The WINBACK25 promotion code was chosen over standard codes because "
+                    "its 25% discount is optimal to reactivate premium lapsing customers without diluting margins "
+                    "on active shoppers."
                 ),
                 "ai_action_plan": (
                     "1. Launch a high-incentive campaign using WhatsApp.\n"
@@ -171,8 +174,11 @@ class OpportunityDiscoveryService:
                     "potential_revenue": Decimal(str(round(potential_rev, 2))),
                     "priority": "medium",
                     "ai_explanation": (
-                        f"Based on co-occurrence shopping patterns, there is a strong affinity between product categories. "
-                        f"Identified {len(cross_sell_ids)} active shoppers who buy {source_cat} but have never purchased from {target_cat}."
+                        f"This cohort of {len(cross_sell_ids)} shoppers was chosen because they possess a strong Shopper Affinity "
+                        f"(at least 30% spend share) for {source_cat} products but zero history (0% affinity) in {target_cat}, "
+                        f"coupled with active purchase Recency (R) of less than 90 days. Other customers without this category "
+                        f"preference were excluded. The recommended coupon code was selected specifically to reduce "
+                        f"the trial barrier for {target_cat} items, rather than using a general site-wide promotion."
                     ),
                     "ai_action_plan": (
                         f"1. Target {source_cat} shoppers with a cross-sell campaign displaying top-rated {target_cat} products.\n"
@@ -232,8 +238,11 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(potential_rev, 2))),
                 "priority": "high",
                 "ai_explanation": (
-                    f"Identified {len(winback_ids)} inactive VIP shoppers. These customers contributed "
-                    "significant revenue historically but haven't placed an order in over 6 months."
+                    f"This cohort of {len(winback_ids)} shoppers was selected due to an extreme purchase Recency (R) "
+                    "inactivity of 180+ days, combined with very high historical Monetary value (M) exceeding "
+                    "₹40,000 in spend. Shoppers with lower spend tiers or active purchase history were excluded. "
+                    "The WINBACK25 promotion code was selected from available offers because a deep 25% incentive "
+                    "is required to overcome long-term dormancy, whereas a lower 10-15% discount would be ineffective."
                 ),
                 "ai_action_plan": (
                     "1. Dispatch a highly personalized WhatsApp campaign offering our deepest discount: WINBACK25 (25% off).\n"
@@ -295,8 +304,11 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(potential_rev, 2))),
                 "priority": "medium",
                 "ai_explanation": (
-                    f"Targeting {len(channel_ids)} active customers who primarily open and click communications "
-                    "on WhatsApp, but haven't placed an order in the last fortnight. Highly receptive to mobile updates."
+                    f"This cohort of {len(channel_ids)} shoppers was selected because they have a low Churn Probability "
+                    "under 40%, a moderate purchase Recency (R) between 14 and 45 days, and preferred channel metrics "
+                    "heavily favoring WhatsApp. Shoppers with high churn risk or other channel preferences were excluded. "
+                    "The DIWALI20/WELCOME15 promotion was selected to drive instant conversational conversions, "
+                    "matching their high-affinity mobile touchpoints."
                 ),
                 "ai_action_plan": (
                     "1. Schedule an instant WhatsApp blast with a 24-hour expiration notice.\n"
@@ -355,9 +367,11 @@ class OpportunityDiscoveryService:
                 "potential_revenue": Decimal(str(round(saved_ltv, 2))),  # Revenue saved through retention
                 "priority": "high",
                 "ai_explanation": (
-                    f"Identified {len(suppression_ids)} customers flagged as over-contacted. "
-                    "These shoppers have ignored recent messages. Continuing to message them increases the risk of unsubscribes. "
-                    "A temporary cooling-off period is recommended to maintain long-term loyalty."
+                    f"This cohort of {len(suppression_ids)} shoppers was selected because their communication Frequency (F) "
+                    "is unsustainably high (3+ messages in the last 7 days) or they have ignored 4+ consecutive campaigns, "
+                    "creating a high unsubscribe/spam risk. Active, engaged shoppers were excluded from suppression. "
+                    "No promotion is recommended for this cohort, as the system mandates a strict cooling-off period "
+                    "to preserve long-term brand relationship."
                 ),
                 "ai_action_plan": (
                     "1. Exclude these customer IDs from all ongoing and upcoming marketing blasts.\n"
