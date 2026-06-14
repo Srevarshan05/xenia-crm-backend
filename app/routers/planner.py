@@ -174,7 +174,7 @@ def make_audience_summary(all_matching, suppressed_ids, eligible_customers) -> A
         for cat, val in aff.items():
             category_affinities[cat] = category_affinities.get(cat, 0.0) + float(val)
     if sample:
-        category_affinities = {k: (v / len(sample)) * 100 for k, v in category_affinities.items()}
+        category_affinities = {k: round(v / len(sample), 2) for k, v in category_affinities.items()}
     category_affinities = dict(sorted(category_affinities.items(), key=lambda x: x[1], reverse=True)[:5])
     
     return AudienceSummary(

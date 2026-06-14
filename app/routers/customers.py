@@ -278,7 +278,7 @@ def get_customer_story(customer_id: UUID, db: Session = Depends(get_db)):
         for cat, weight in sorted(metrics.category_affinity_json.items(), key=lambda x: x[1], reverse=True):
             category_preferences.append({
                 "category": cat,
-                "percentage": int(weight * 100)
+                "percentage": int(round(weight))
             })
     if not category_preferences:
         category_preferences = [
