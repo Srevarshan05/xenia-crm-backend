@@ -30,7 +30,8 @@ def list_customers(
     GET /api/customers
     List customers with pagination, search (name/email), and city filtering.
     """
-    query = db.query(Customer)
+    from sqlalchemy.orm import joinedload
+    query = db.query(Customer).options(joinedload(Customer.metrics))
     if search:
         query = query.filter(
             (Customer.name.ilike(f"%{search}%")) | 
@@ -41,7 +42,23 @@ def list_customers(
         
     offset = (page - 1) * limit
     customers = query.order_by(Customer.name).offset(offset).limit(limit).all()
-    return customers
+    
+    result = []
+    for c in customers:
+        total_spend = c.metrics.total_spend if c.metrics else 0.0
+        churn_prob = c.metrics.churn_probability if c.metrics else 0.15
+        
+        result.append({
+            "customer_id": c.customer_id,
+            "name": c.name,
+            "email": c.email,
+            "phone": c.phone,
+            "city": c.city,
+            "join_date": c.join_date,
+            "total_spend": total_spend,
+            "churn_probability": churn_prob
+        })
+    return result
 
 @router.get("/segments", response_model=List[Dict[str, Any]])
 def get_all_segments(db: Session = Depends(get_db)):
@@ -67,14 +84,30 @@ def get_customers_in_segment(
     GET /api/customers/segments/{segment_name}
     List all customers assigned to a specific segment.
     """
+    from sqlalchemy.orm import joinedload
     offset = (page - 1) * limit
-    customers = db.query(Customer).join(
+    customers = db.query(Customer).options(joinedload(Customer.metrics)).join(
         CustomerSegment, Customer.customer_id == CustomerSegment.customer_id
     ).filter(
         CustomerSegment.segment_name == segment_name
     ).offset(offset).limit(limit).all()
     
-    return customers
+    result = []
+    for c in customers:
+        total_spend = c.metrics.total_spend if c.metrics else 0.0
+        churn_prob = c.metrics.churn_probability if c.metrics else 0.15
+        
+        result.append({
+            "customer_id": c.customer_id,
+            "name": c.name,
+            "email": c.email,
+            "phone": c.phone,
+            "city": c.city,
+            "join_date": c.join_date,
+            "total_spend": total_spend,
+            "churn_probability": churn_prob
+        })
+    return result
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
 def get_customer(customer_id: UUID, db: Session = Depends(get_db)):
@@ -85,7 +118,20 @@ def get_customer(customer_id: UUID, db: Session = Depends(get_db)):
     customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    return customer
+        
+    total_spend = customer.metrics.total_spend if customer.metrics else 0.0
+    churn_prob = customer.metrics.churn_probability if customer.metrics else 0.15
+    
+    return {
+        "customer_id": customer.customer_id,
+        "name": customer.name,
+        "email": customer.email,
+        "phone": customer.phone,
+        "city": customer.city,
+        "join_date": customer.join_date,
+        "total_spend": total_spend,
+        "churn_probability": churn_prob
+    }
 
 @router.get("/{customer_id}/metrics", response_model=CustomerMetricsResponse)
 def get_customer_metrics(customer_id: UUID, db: Session = Depends(get_db)):

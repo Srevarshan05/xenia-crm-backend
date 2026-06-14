@@ -10,6 +10,8 @@ class CustomerResponse(BaseModel):
     phone: Optional[str] = None
     city: Optional[str] = None
     join_date: datetime
+    total_spend: Optional[float] = None
+    churn_probability: Optional[float] = None
 
     class Config:
         from_attributes = True
