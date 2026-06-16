@@ -6,19 +6,75 @@ The platform helps marketing teams identify customer opportunities, create targe
 
 ---
 
+# Live Services
+
+## Core CRM Backend
+
+Base URL:
+
+```text
+http://xenia-backend-v2-env.eba-mymksz3y.ap-south-1.elasticbeanstalk.com
+```
+
+Swagger Documentation:
+
+```text
+http://xenia-backend-v2-env.eba-mymksz3y.ap-south-1.elasticbeanstalk.com/docs
+```
+
+OpenAPI Schema:
+
+```text
+http://xenia-backend-v2-env.eba-mymksz3y.ap-south-1.elasticbeanstalk.com/openapi.json
+```
+
+---
+
+## Channel Simulator Service
+
+Base URL:
+
+```text
+http://xenia-channel-simulator-env.eba-wjgmxqpw.ap-south-1.elasticbeanstalk.com
+```
+
+Swagger Documentation:
+
+```text
+http://xenia-channel-simulator-env.eba-wjgmxqpw.ap-south-1.elasticbeanstalk.com/docs
+```
+
+The Channel Simulator is responsible for simulating customer engagement events and campaign lifecycle tracking, including:
+
+```text
+Sent
+→ Delivered
+→ Opened
+→ Clicked
+→ Promo Applied
+→ Purchased
+```
+
+These simulated events are sent back to the Core CRM Backend through webhook callbacks, enabling attribution analytics, campaign reporting, and lifecycle tracking.
+
+---
+
 # Architecture Overview
 
 ```text
 Frontend (Vercel)
         ↓
-FastAPI Backend (AWS Elastic Beanstalk)
+Core CRM Backend
+(AWS Elastic Beanstalk)
+
         ↓
 Neon PostgreSQL
 
-Integrations
+External Integrations
 ├── Groq (Llama 3.3 70B)
 ├── ElevenLabs
 └── Channel Simulator Service
+   (AWS Elastic Beanstalk)
 ```
 
 ---
@@ -27,27 +83,34 @@ Integrations
 
 ## Shopper Intelligence
 
-* Customer segmentation
-* RFM-based audience analysis
-* Churn prediction
-* Customer lifecycle insights
-* Shopper journey tracking
+- Customer segmentation
+- RFM-based audience analysis
+- Churn prediction
+- Customer lifecycle insights
+- Shopper journey tracking
+- Customer profile management
+
+---
 
 ## Suggested Actions
 
 Automatically identifies marketing opportunities such as:
 
-* VIP shopper re-engagement
-* Customer reactivation
-* Cross-sell opportunities
-* Channel-based campaigns
+- VIP Shopper Re-engagement
+- Customer Reactivation
+- Cross-Sell Opportunities
+- Channel Promotion Campaigns
 
 Each recommendation includes:
 
-* Target audience
-* Estimated reach
-* Recommended promotion
-* Campaign rationale
+- Target audience
+- Estimated reach
+- Revenue opportunity
+- Recommended promotion
+- Suggested channel
+- Campaign rationale
+
+---
 
 ## Campaign Management
 
@@ -64,11 +127,14 @@ Draft
 
 Features include:
 
-* Audience targeting
-* Promotion selection
-* Campaign content generation
-* Approval workflow
-* Campaign tracking
+- Audience targeting
+- Promotion selection
+- Campaign content generation
+- Approval workflow
+- Campaign tracking
+- Attribution reporting
+
+---
 
 ## Campaign Content Generation
 
@@ -76,11 +142,14 @@ Powered by Groq Llama 3.3 70B.
 
 Generates:
 
-* WhatsApp campaigns
-* Email campaigns
-* SMS campaigns
-* Campaign explanations
-* Marketing copy
+- WhatsApp campaign content
+- Email campaign content
+- SMS campaign content
+- Campaign recommendations
+- Marketing copy variations
+- Explainable campaign rationale
+
+---
 
 ## Voice Campaigns
 
@@ -88,30 +157,36 @@ Powered by ElevenLabs.
 
 Features:
 
-* AI-generated voice scripts
-* Voice advertisement creation
-* Multi-voice support
-* Voice campaign simulation
-* Audience eligibility validation
+- AI-generated voice scripts
+- Voice advertisement generation
+- Multi-voice selection
+- Multi-language support
+- Voice campaign simulation
+- Audience eligibility validation
+- Campaign approval workflow
+- Voice campaign reporting
 
-Restricted to:
+Eligible Segments:
 
-* Champions
-* Lost Champions
+- Champions
+- Lost Champions
 
-customer segments.
+---
 
 ## Promotion Management
 
 Supports:
 
-* Percentage discounts
-* Fixed amount discounts
-* Category targeting
-* City targeting
-* Segment targeting
-* Promotion validity controls
-* Usage limits
+- Percentage Discounts
+- Fixed Amount Discounts
+- Category Targeting
+- City Targeting
+- Segment Targeting
+- Promotion Validity Controls
+- Usage Limits
+- Priority Management
+
+---
 
 ## Attribution & Lifecycle Tracking
 
@@ -128,35 +203,40 @@ Sent
 
 Provides:
 
-* Campaign attribution
-* Revenue attribution
-* Engagement tracking
-* Conversion analytics
+- Campaign attribution
+- Revenue attribution
+- Conversion analytics
+- Customer engagement timelines
+- Campaign performance tracking
+
+---
 
 ## Reporting
 
-* Campaign reports
-* Voice campaign reports
-* PDF report generation
-* Historical campaign summaries
+- Campaign performance reports
+- Voice campaign reports
+- PDF report generation
+- Historical campaign analysis
+- Revenue attribution summaries
 
 ---
 
 # Technology Stack
 
-| Layer       | Technology         |
-| ----------- | ------------------ |
-| Framework   | FastAPI            |
-| Language    | Python 3.12        |
-| Database    | PostgreSQL (Neon)  |
-| ORM         | SQLAlchemy         |
-| Migrations  | Alembic            |
-| AI Platform | Groq               |
-| Model       | Llama 3.3 70B      |
-| Voice AI    | ElevenLabs         |
-| ML          | scikit-learn       |
-| PDF Engine  | ReportLab          |
-| Server      | Uvicorn / Gunicorn |
+| Layer | Technology |
+|---------|---------|
+| Framework | FastAPI |
+| Language | Python 3.12 |
+| Database | PostgreSQL (Neon) |
+| ORM | SQLAlchemy |
+| Migrations | Alembic |
+| AI Platform | Groq |
+| Model | Llama 3.3 70B |
+| Voice AI | ElevenLabs |
+| Machine Learning | scikit-learn |
+| PDF Generation | ReportLab |
+| Server | Uvicorn |
+| Hosting | AWS Elastic Beanstalk |
 
 ---
 
@@ -166,10 +246,11 @@ Provides:
 
 Used for:
 
-* Campaign content generation
-* Voice script generation
-* Campaign recommendations
-* Explainable AI outputs
+- Campaign content generation
+- Voice script generation
+- Campaign recommendations
+- Explainable AI outputs
+- Marketing content drafting
 
 Model:
 
@@ -183,15 +264,17 @@ llama-3.3-70b-versatile
 
 Used for:
 
-* Text-to-speech synthesis
-* Voice advertisement generation
-* Voice campaign creation
+- Text-to-Speech synthesis
+- Voice advertisement generation
+- Voice campaign creation
+- Multi-language voice output
+- Voice selection and customization
 
 ---
 
 ## Channel Simulator Service
 
-The Channel Simulator mimics real communication providers and generates engagement events for testing.
+The Channel Simulator mimics real communication providers and customer behavior.
 
 Simulated Events:
 
@@ -204,7 +287,16 @@ Promo Applied
 Purchased
 ```
 
-Generated events are sent back to the backend through webhook callbacks, allowing attribution and reporting to function similarly to real-world marketing systems.
+Generated events are delivered back to the Core CRM Backend through webhook callbacks.
+
+This allows Xenia CRM to demonstrate:
+
+- Lifecycle tracking
+- Attribution analytics
+- Campaign reporting
+- Revenue attribution
+
+without requiring real SMS, Email, WhatsApp, or Voice providers.
 
 ---
 
@@ -226,7 +318,8 @@ backend/
 ├── requirements.txt
 ├── Procfile
 ├── runtime.txt
-└── application.py
+├── application.py
+└── deployment_report.md
 ```
 
 ---
@@ -239,6 +332,8 @@ backend/
 git clone <repository-url>
 cd backend
 ```
+
+---
 
 ## Create Virtual Environment
 
@@ -257,6 +352,8 @@ Linux / macOS:
 ```bash
 source venv/bin/activate
 ```
+
+---
 
 ## Install Dependencies
 
@@ -297,7 +394,7 @@ python scripts/compute_segments.py
 
 ---
 
-# Running The Server
+# Running the Server
 
 Development:
 
@@ -331,11 +428,13 @@ http://localhost:8000/openapi.json
 
 Deployment Configuration:
 
-* Python 3.12
-* Single Instance (t3.micro)
-* Gunicorn + Uvicorn Workers
+- Python 3.12
+- Single Instance (t3.micro)
+- AWS Elastic Beanstalk
+- Uvicorn Application Server
+- Environment Variable Based Configuration
 
-Environment Variables:
+Required Environment Variables:
 
 ```env
 DATABASE_URL
@@ -344,74 +443,92 @@ ELEVENLABS_API_KEY
 SECRET_KEY
 ```
 
-Backend API Base URL:
-
-```text
-https://your-backend-domain.amazonaws.com
-```
-
-Health Check Endpoint:
-
-```text
-GET /health
-```
-
 ---
 
 # Key Design Decisions
 
-### PostgreSQL
+## PostgreSQL
 
 Chosen for:
 
-* Relational data modeling
-* Strong consistency
-* SQL analytics
-* Campaign attribution queries
+- Relational data modeling
+- Strong consistency
+- ACID transactions
+- SQL analytics
+- Campaign attribution queries
 
-### Neon
+---
 
-Chosen for:
-
-* Serverless PostgreSQL
-* Automatic scaling
-* Connection pooling
-* Low operational overhead
-
-### Groq
+## Neon
 
 Chosen for:
 
-* Fast inference
-* Structured JSON outputs
-* Low latency campaign generation
+- Serverless PostgreSQL
+- Automatic scaling
+- Connection pooling
+- Low operational overhead
+- Cost efficiency
 
-### Elastic Beanstalk
+---
+
+## Groq
 
 Chosen for:
 
-* Managed deployment
-* Easy scaling
-* Simplified infrastructure management
+- Fast inference
+- Low latency generation
+- Structured JSON outputs
+- Efficient campaign content generation
 
-### Webhook-Based Attribution
+---
 
-Engagement events are processed through webhook callbacks rather than polling, providing a realistic event-driven marketing architecture.
+## ElevenLabs
+
+Chosen for:
+
+- High-quality speech synthesis
+- Natural voice generation
+- Multi-language support
+- Voice campaign creation
+
+---
+
+## AWS Elastic Beanstalk
+
+Chosen for:
+
+- Managed deployment
+- Simplified infrastructure management
+- Easy scaling
+- Integrated monitoring and logging
+
+---
+
+## Webhook-Based Attribution
+
+Engagement events are processed through webhook callbacks rather than polling.
+
+Benefits:
+
+- Event-driven architecture
+- Real-time attribution updates
+- Reduced server load
+- Realistic marketing workflow simulation
 
 ---
 
 # API Documentation
 
-Swagger UI:
+Core CRM Backend:
 
 ```text
-http://localhost:8000/docs
+http://xenia-backend-v2-env.eba-mymksz3y.ap-south-1.elasticbeanstalk.com/docs
 ```
 
-OpenAPI Specification:
+Channel Simulator Service:
 
 ```text
-http://localhost:8000/openapi.json
+http://xenia-channel-simulator-env.eba-wjgmxqpw.ap-south-1.elasticbeanstalk.com/docs
 ```
 
 ---
