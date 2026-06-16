@@ -1,160 +1,421 @@
-# Xenia CRM — Backend API
+# Xenia CRM Backend
 
-A FastAPI + PostgreSQL backend powering the Xenia Retail CRM platform. Handles customer intelligence, AI-driven campaign planning, promotion management, and revenue attribution — all backed by Groq (Llama 3.3 70B) for fast AI inference.
+Xenia CRM Backend is a FastAPI-based backend service powering the Xenia Retail Marketing Platform.
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | FastAPI (Python 3.11+) |
-| Database | PostgreSQL via SQLAlchemy ORM |
-| AI / LLM | Groq API — `llama-3.3-70b-versatile` |
-| ML | scikit-learn (churn prediction model) |
-| Migrations | Alembic |
-| Server | Uvicorn (ASGI) |
+The platform helps marketing teams identify customer opportunities, create targeted campaigns, generate AI-assisted marketing content, manage promotions, execute voice campaigns, track customer engagement, and measure campaign effectiveness through attribution analytics.
 
 ---
 
-## Core Modules
+# Architecture Overview
 
-### `/api/opportunities` — Suggested Actions
-Auto-detected revenue opportunities (win-back, cross-sell, re-engage) generated nightly from customer RFM signals. Each opportunity has an audience size, potential revenue, recommended channel, and promotion.
+```text
+Frontend (Vercel)
+        ↓
+FastAPI Backend (AWS Elastic Beanstalk)
+        ↓
+Neon PostgreSQL
 
-### `/api/planner` — AI Campaign Planner
-- `GET /prepare-context` — Fetches audience cohort, suppression data, and best-matching promotion for a given opportunity. Pure DB read, no AI.
-- `POST /generate` — Calls Groq to generate WhatsApp / Email / SMS message copies, simulation projections, and explainable rationale.
-
-### `/api/campaigns` — Campaign Lifecycle
-Full campaign lifecycle: `draft → reviewed → awaiting_approval → approved → launched → completed`.
-- `GET /` — List all campaigns with status filter
-- `POST /` — Create a new campaign
-- `GET /{id}/analytics` — Funnel metrics (sent / delivered / opened / clicked / purchased)
-- `GET /{id}/recipients` — Individual communication logs
-- `POST /{id}/launch` — Dispatch campaign to all recipients
-
-### `/api/promotions` — Promotions Engine
-CRUD for promotions with category/city targeting, date validity, max usage limits, and discount types (Percentage / Fixed).
-
-### `/api/customers` — Shoppers
-Paginated customer list, segment filtering, RFM metrics, and per-shopper story endpoint.
-
-### `/api/briefing/latest` — Daily Executive Brief
-Returns the latest AI-generated executive briefing instantly from cache. If today's briefing is missing, returns the most recent one and generates today's in the background (non-blocking).
-
-### `/api/analytics` — NL Query Engine
-Natural language → SQL via Groq. Analysts can ask questions in plain English and get structured data results.
-
-### `/api/voice` — Voice Campaigns (ElevenLabs)
-Premium outreach channel restricted to Champions and Lost Champions only.
-- `GET /voices` — Fetch available ElevenLabs voice models (filters for "premade" free category voices).
-- `GET /eligible-audience` — Verify customer cohort size and count eligible participants.
-- `POST /generate-script` — Generate personalized voice scripts using Groq based on segment history.
-- `POST /generate-audio` — Text-To-Speech (TTS) voice generation via ElevenLabs API (returns base64 audio).
-- `POST /simulate-calls` — Synthetic voice call simulator and outcome status logging.
-
-### `/api/settings` — API Configuration
-System settings configuration and credentials.
-- `GET /api-keys` — Fetch current API status (Groq and Elevenlabs keys).
-- `POST /api-keys` — Store and validate new credentials in real-time.
-
-### `/api/webhook/delivery` — Attribution Webhooks
-Simulates carrier delivery callbacks (delivered / opened / clicked / promo_applied / purchased) for attribution tracking.
-
----
-
-## Project Structure
-
+Integrations
+├── Groq (Llama 3.3 70B)
+├── ElevenLabs
+└── Channel Simulator Service
 ```
+
+---
+
+# Core Capabilities
+
+## Shopper Intelligence
+
+* Customer segmentation
+* RFM-based audience analysis
+* Churn prediction
+* Customer lifecycle insights
+* Shopper journey tracking
+
+## Suggested Actions
+
+Automatically identifies marketing opportunities such as:
+
+* VIP shopper re-engagement
+* Customer reactivation
+* Cross-sell opportunities
+* Channel-based campaigns
+
+Each recommendation includes:
+
+* Target audience
+* Estimated reach
+* Recommended promotion
+* Campaign rationale
+
+## Campaign Management
+
+Supports the complete campaign lifecycle:
+
+```text
+Draft
+→ Review
+→ Awaiting Approval
+→ Approved
+→ Active
+→ Completed
+```
+
+Features include:
+
+* Audience targeting
+* Promotion selection
+* Campaign content generation
+* Approval workflow
+* Campaign tracking
+
+## Campaign Content Generation
+
+Powered by Groq Llama 3.3 70B.
+
+Generates:
+
+* WhatsApp campaigns
+* Email campaigns
+* SMS campaigns
+* Campaign explanations
+* Marketing copy
+
+## Voice Campaigns
+
+Powered by ElevenLabs.
+
+Features:
+
+* AI-generated voice scripts
+* Voice advertisement creation
+* Multi-voice support
+* Voice campaign simulation
+* Audience eligibility validation
+
+Restricted to:
+
+* Champions
+* Lost Champions
+
+customer segments.
+
+## Promotion Management
+
+Supports:
+
+* Percentage discounts
+* Fixed amount discounts
+* Category targeting
+* City targeting
+* Segment targeting
+* Promotion validity controls
+* Usage limits
+
+## Attribution & Lifecycle Tracking
+
+Tracks the complete customer engagement lifecycle:
+
+```text
+Sent
+→ Delivered
+→ Opened
+→ Clicked
+→ Promo Applied
+→ Purchased
+```
+
+Provides:
+
+* Campaign attribution
+* Revenue attribution
+* Engagement tracking
+* Conversion analytics
+
+## Reporting
+
+* Campaign reports
+* Voice campaign reports
+* PDF report generation
+* Historical campaign summaries
+
+---
+
+# Technology Stack
+
+| Layer       | Technology         |
+| ----------- | ------------------ |
+| Framework   | FastAPI            |
+| Language    | Python 3.12        |
+| Database    | PostgreSQL (Neon)  |
+| ORM         | SQLAlchemy         |
+| Migrations  | Alembic            |
+| AI Platform | Groq               |
+| Model       | Llama 3.3 70B      |
+| Voice AI    | ElevenLabs         |
+| ML          | scikit-learn       |
+| PDF Engine  | ReportLab          |
+| Server      | Uvicorn / Gunicorn |
+
+---
+
+# Integrations
+
+## Groq
+
+Used for:
+
+* Campaign content generation
+* Voice script generation
+* Campaign recommendations
+* Explainable AI outputs
+
+Model:
+
+```text
+llama-3.3-70b-versatile
+```
+
+---
+
+## ElevenLabs
+
+Used for:
+
+* Text-to-speech synthesis
+* Voice advertisement generation
+* Voice campaign creation
+
+---
+
+## Channel Simulator Service
+
+The Channel Simulator mimics real communication providers and generates engagement events for testing.
+
+Simulated Events:
+
+```text
+Sent
+Delivered
+Opened
+Clicked
+Promo Applied
+Purchased
+```
+
+Generated events are sent back to the backend through webhook callbacks, allowing attribution and reporting to function similarly to real-world marketing systems.
+
+---
+
+# Project Structure
+
+```text
 backend/
 ├── app/
-│   ├── main.py              # FastAPI app entry point, lifespan, CORS
-│   ├── config.py            # Pydantic settings (reads from .env)
-│   ├── database.py          # SQLAlchemy engine + session
-│   ├── models/              # SQLAlchemy ORM models
-│   ├── schemas/             # Pydantic request/response schemas
-│   ├── routers/             # Route handlers (one file per domain)
-│   │   ├── campaigns.py
-│   │   ├── planner.py
-│   │   ├── promotions.py
-│   │   ├── customers.py
-│   │   ├── opportunities.py
-│   │   ├── analytics.py
-│   │   ├── briefing.py
-│   │   └── webhooks.py
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models/
+│   ├── schemas/
+│   ├── routers/
 │   ├── services/
-│   │   ├── xenia_ai.py      # Groq LLM integration (all AI calls)
-│   │   ├── simulation.py    # Campaign simulation engine
-│   │   ├── attribution.py   # Revenue attribution pipeline
-│   │   └── basket_affinity.py
 │   └── ml/
-│       ├── train_churn.py   # scikit-learn churn model training
-│       └── feature_engineering.py
 ├── scripts/
-│   ├── init_db.py           # Seed initial data
-│   └── compute_segments.py  # RFM + segment computation
-├── alembic/                 # Database migrations
+├── alembic/
 ├── requirements.txt
-└── .env                     # Local config (not committed)
+├── Procfile
+├── runtime.txt
+└── application.py
 ```
 
 ---
 
-## Setup & Run
+# Local Development
 
-### 1. Clone & create virtual environment
+## Clone Repository
+
 ```bash
-git clone https://github.com/Srevarshan05/xenia-crm-backend.git
-cd xenia-crm-backend
+git clone <repository-url>
+cd backend
+```
+
+## Create Virtual Environment
+
+```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # macOS/Linux
+```
+
+Windows:
+
+```bash
+venv\Scripts\activate
+```
+
+Linux / macOS:
+
+```bash
+source venv/bin/activate
+```
+
+## Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
+---
+
+# Environment Variables
+
 Create a `.env` file:
+
 ```env
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/xeno_crm
-GROQ_API_KEY=your_groq_api_key_here
+DATABASE_URL=<postgres-connection-string>
+
+GROQ_API_KEY=<groq-api-key>
+
+ELEVENLABS_API_KEY=<elevenlabs-api-key>
+
 APP_ENV=development
+
 DEBUG=true
-SECRET_KEY=change-me-in-production
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+
+SECRET_KEY=<secret-key>
 ```
 
-### 3. Set up database
+---
+
+# Database Setup
+
+Initialize and seed the database:
+
 ```bash
-# Create DB in PostgreSQL, then run:
 python scripts/init_db.py
 python scripts/compute_segments.py
 ```
 
-### 4. Start the server
+---
+
+# Running The Server
+
+Development:
+
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-API docs available at: `http://localhost:8000/docs`
+Application:
+
+```text
+http://localhost:8000
+```
+
+Interactive API Documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+OpenAPI Schema:
+
+```text
+http://localhost:8000/openapi.json
+```
 
 ---
 
-## Key Design Decisions
+# Deployment
 
-- **Groq over Gemini** — Switched to Groq (Llama 3.3 70B) for significantly faster inference (~500ms vs 3–8s). All AI calls use JSON mode for reliable structured output.
-- **Non-blocking briefing** — The daily briefing endpoint always returns instantly from cache. If today's briefing is missing, Groq generation is dispatched as a background task.
-- **Attribution via webhooks** — Revenue attribution runs only on delivery/purchase webhook events, not on every analytics GET request.
-- **Lazy audience loading** — `prepare-context` runs only on explicit user action, not automatically on page load.
+## AWS Elastic Beanstalk
+
+Deployment Configuration:
+
+* Python 3.12
+* Single Instance (t3.micro)
+* Gunicorn + Uvicorn Workers
+
+Environment Variables:
+
+```env
+DATABASE_URL
+GROQ_API_KEY
+ELEVENLABS_API_KEY
+SECRET_KEY
+```
+
+Backend API Base URL:
+
+```text
+https://your-backend-domain.amazonaws.com
+```
+
+Health Check Endpoint:
+
+```text
+GET /health
+```
 
 ---
 
-## API Reference
+# Key Design Decisions
 
-Full interactive docs: `http://localhost:8000/docs` (Swagger UI)
+### PostgreSQL
+
+Chosen for:
+
+* Relational data modeling
+* Strong consistency
+* SQL analytics
+* Campaign attribution queries
+
+### Neon
+
+Chosen for:
+
+* Serverless PostgreSQL
+* Automatic scaling
+* Connection pooling
+* Low operational overhead
+
+### Groq
+
+Chosen for:
+
+* Fast inference
+* Structured JSON outputs
+* Low latency campaign generation
+
+### Elastic Beanstalk
+
+Chosen for:
+
+* Managed deployment
+* Easy scaling
+* Simplified infrastructure management
+
+### Webhook-Based Attribution
+
+Engagement events are processed through webhook callbacks rather than polling, providing a realistic event-driven marketing architecture.
 
 ---
 
-## License
+# API Documentation
 
-MIT
+Swagger UI:
+
+```text
+http://localhost:8000/docs
+```
+
+OpenAPI Specification:
+
+```text
+http://localhost:8000/openapi.json
+```
+
+---
+
+# License
+
+MIT License
